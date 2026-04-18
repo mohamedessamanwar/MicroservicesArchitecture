@@ -1,0 +1,358 @@
+services:
+  # =========================
+  # PostgreSQL (Write DB) - Debezium needs logical replication
+  # =========================
+  write-db:
+    image: postgres:16-alpine
+    container_name: write-db
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: write_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d write_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =========================
+  # Redis
+  # =========================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # =========================
+  # RabbitMQ
+  # =========================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    # Environment variables to set the default admin user and password
+    # These credentials are used by the OrderService, Debezium, and Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    ports:
+      - "5672:5672"   # AMQP protocol port (used by services to publish/consume)
+      - "15672:15672" # Management UI port (access at http://localhost:15672)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - microservices-network
+    # Healthcheck is CRITICAL for dependent services (like rabbitmq-init) to know when RabbitMQ is actually ready
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  # =========================
+  # RabbitMQ Init (Create Exchange/Queues/Bindings)
+  # This is a specialized container that runs ONCE to set up the RabbitMQ topology.
+  # It eliminates the need for manual setup or handling topology in the application code.
+  # =========================
+  rabbitmq-init:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-init
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+    command: |
+      sh -c "
+      echo 'Waiting for rabbitmq management API on port 15672...' &&
+      until wget -qO- http://admin:admin123@rabbitmq:15672/api/overview > /dev/null 2>&1; do
+        sleep 2
+      done
+      echo 'Management API is up. Declaring topology...' &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare exchange name=cdc.exchange type=topic durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=order.write.cdc.q durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=payment.write.cdc.q durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='order-server.public.#' &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=payment.write.cdc.q routing_key='payment-server.public.#' &&
+      # DEBUG: Catch-all to see what keys are actually being sent
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='#' &&
+      echo 'RabbitMQ exchange/queues/wildcard-bindings created.'
+      "
+
+
+  # =========================
+  # Database Init (Create databases & Set up Replication)
+  # =========================
+  db-init:
+    image: postgres:16-alpine
+    container_name: db-init
+    depends_on:
+      write-db:
+        condition: service_healthy
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+    environment:
+      PGHOST: write-db
+      PGPORT: 5432
+      PGUSER: admin
+      PGPASSWORD: pass
+      PGDATABASE: postgres
+    command: |
+      sh -c "
+      echo 'Creating databases on Primary (write-db)...' &&
+      psql -h write-db -c 'CREATE DATABASE \"OrderDb\";' 2>&1 | grep -v 'already exists' || true &&
+      psql -h write-db -c 'CREATE DATABASE \"PaymentDb\";' 2>&1 | grep -v 'already exists' || true &&
+
+      
+      echo 'Creating OrderDb on Replica (read-db)...' &&
+      psql -h read-db -c 'CREATE DATABASE \"OrderDb\";' 2>&1 | grep -v 'already exists' || true &&
+      psql -h read-db -c 'CREATE DATABASE \"PaymentDb\";' 2>&1 | grep -v 'already exists' || true &&
+
+
+      echo 'Setting up logical replication publications on primary...' &&
+      psql -h write-db -d OrderDb -c \"DROP PUBLICATION IF EXISTS order_pub;\" &&
+      psql -h write-db -d OrderDb -c \"CREATE PUBLICATION order_pub FOR ALL TABLES;\" &&
+      psql -h write-db -d PaymentDb -c \"DROP PUBLICATION IF EXISTS payment_pub;\" &&
+      psql -h write-db -d PaymentDb -c \"CREATE PUBLICATION payment_pub FOR ALL TABLES;\" &&
+      
+      echo 'Ensuring Replica Identity on key tables...' &&
+      # This ensures UPDATE/DELETE events are captured fully
+      psql -h write-db -d OrderDb -c \"ALTER TABLE IF EXISTS \\\"Orders\\\" REPLICA IDENTITY FULL;\" || true &&
+      
+      echo 'Databases and Publications setup completed.'
+      "
+
+  # =========================
+  # PostgreSQL (Read Replica) - Asynchronous Logical Replica
+  # =========================
+  read-db:
+    image: postgres:16-alpine
+    container_name: read-db
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: replica_db
+    ports:
+      - "5433:5432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d replica_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =========================
+  # Debezium - Order DB
+  # Connects to the Write DB (PostgreSQL) and streams changes to RabbitMQ.
+  # Depends on the DB existing and RabbitMQ being configured (rabbitmq-init).
+  # =========================
+  debezium-order:
+    image: debezium/server:2.6
+    container_name: debezium-order
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - microservices-network
+    environment:
+      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
+      - DEBEZIUM_SOURCE_SLOT_NAME=order_slot
+      - DEBEZIUM_SOURCE_PUBLICATION_NAME=order_pub
+      - DEBEZIUM_SOURCE_DATABASE_DBNAME=OrderDb
+      - DEBEZIUM_SOURCE_TOPIC_PREFIX=order-server
+    restart: unless-stopped
+    volumes:
+      - ./debezium/orderdb-application.properties:/debezium/conf/application.properties:ro
+      - debezium_order_data:/debezium/data
+
+  # =========================
+  # Debezium - Payment DB
+  # =========================
+  debezium-payment:
+    image: debezium/server:2.6
+    container_name: debezium-payment
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - microservices-network
+    environment:
+      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
+      - DEBEZIUM_SOURCE_SLOT_NAME=payment_slot
+      - DEBEZIUM_SOURCE_PUBLICATION_NAME=payment_pub
+      - DEBEZIUM_SOURCE_DATABASE_DBNAME=PaymentDb
+      - DEBEZIUM_SOURCE_TOPIC_PREFIX=payment-server
+    restart: unless-stopped
+    volumes:
+      - ./debezium/paymentdb-application.properties:/debezium/conf/application.properties:ro
+      - debezium_payment_data:/debezium/data
+
+  # =========================
+  # Order Service 
+  # =========================
+  order-service:
+    build:
+      context: .
+      dockerfile: OrderService.Api/Dockerfile
+      args:
+        BUILD_CONFIGURATION: Debug
+    container_name: order-service
+    ports:
+      - "8080:8080"
+      - "4024:4024"
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
+      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
+      - ConnectionStrings__UAE__Primary=Host=write-db-uae;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass;
+      - ConnectionStrings__UAE__Replica=Host=read-db-uae;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass;
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - VSDBG_PMI_ENABLE=1
+      - DOTNET_ENVIRONMENT=Development
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # =========================
+  # Payment Service 
+  # =========================
+  payment-service:
+    build:
+      context: .
+      dockerfile: Payment.Api/Dockerfile
+    container_name: payment-service
+    ports:
+      - "8081:8080"
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
+      - ConnectionStrings__Egypt__Replica=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
+      - ConnectionStrings__UAE__Primary=Host=write-db-uae;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass;
+      - ConnectionStrings__UAE__Replica=Host=write-db-uae;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass;
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices-network
+
+  # =========================
+  # Replica Setup (Automated Subscription)
+  # =========================
+  replica-setup:
+    image: postgres:16-alpine
+    container_name: replica-setup
+    depends_on:
+      order-service:
+        condition: service_healthy
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    environment:
+      PGPASSWORD: pass
+    restart: "no"
+    command: |
+      sh -c "
+      echo 'Waiting for OrderService to apply migrations to replica...' &&
+      until psql -h read-db -U admin -d OrderDb -c 'SELECT count(*) FROM \"Orders\";' > /dev/null 2>&1; do
+        echo 'Waiting for tables on read-db...'
+        sleep 5
+      done
+      
+      echo 'Schema detected. Checking for subscription...'
+      if psql -h read-db -U admin -d OrderDb -tAc \"SELECT 1 FROM pg_subscription WHERE subname = 'order_sub'\" | grep -q 1; then
+        echo 'Subscription order_sub already exists. Skipping.'
+      else
+        echo 'Cleaning up potential stale slots on Primary...'
+        psql -h write-db -U admin -d OrderDb -c \"SELECT pg_drop_replication_slot('order_sub') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'order_sub');\" || true
+        
+        echo 'Creating subscription...'
+        psql -h read-db -U admin -d OrderDb -c \"CREATE SUBSCRIPTION order_sub CONNECTION 'host=write-db port=5432 user=admin password=pass dbname=OrderDb' PUBLICATION order_pub;\" && \
+        echo 'Subscription created.'
+      fi
+      
+      echo 'Logical replication automated successfully.'
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  debezium_order_data:
+  debezium_payment_data:
+
+networks:
+  microservices-network:
+    driver: bridge
