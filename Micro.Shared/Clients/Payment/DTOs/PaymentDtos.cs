@@ -4,6 +4,8 @@ public record CreatePaymentRequest(Guid OrderId, decimal Amount);
 
 public record PaymentDto(Guid Id, Guid OrderId, decimal Amount, PaymentStatus Status);
 
+public record TestResilienceRequest(int DelayMilliseconds = 0, int StatusCode = 200);
+
 public enum PaymentStatus
 {
     Pending = 0,

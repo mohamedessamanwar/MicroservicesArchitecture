@@ -46,6 +46,40 @@ public class PaymentsController : ControllerBase
         return CreatedAtAction(nameof(Create), apiResult);
     }
 
+    [HttpPost("test-resilience")]
+    [ProducesResponseType(typeof(ApiResult<PaymentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult<PaymentResponseDto>), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> TestResilience([FromBody] Micro.Shared.Clients.Payment.DTOs.TestResilienceRequest request)
+    {
+        _logger.LogInformation("TestResilience called with Delay={Delay}ms, StatusCode={StatusCode}",
+            request.DelayMilliseconds, request.StatusCode);
+
+        if (request.DelayMilliseconds > 0)
+        {
+            await Task.Delay(request.DelayMilliseconds);
+        }
+
+        if (request.StatusCode >= 400)
+        {
+            return StatusCode(request.StatusCode, new ApiResult<PaymentResponseDto>
+            {
+                Success = false,
+                Message = $"Simulated failure with status code {request.StatusCode}"
+            });
+        }
+
+        return Ok(new ApiResult<PaymentResponseDto>
+        {
+            Success = true,
+            Message = "Resilience test successful",
+            Data = new PaymentResponseDto(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                100,
+                PaymentStatus.Completed)
+        });
+    }
+
     [HttpPut("{id}/status")]
     [ProducesResponseType(typeof(ApiResult<PaymentStatusUpdateResult>), 200)]
     [ProducesResponseType(typeof(ApiResult<PaymentStatusUpdateResult>), 400)]

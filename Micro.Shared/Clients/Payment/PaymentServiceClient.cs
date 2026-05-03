@@ -25,4 +25,16 @@ public sealed class PaymentServiceClient : DownstreamApiClientBase, IPaymentServ
             useIdempotencyKey: false,
             cancellationToken: cancellationToken);
     }
+
+    public Task<ApiResult<PaymentDto>> TestResilienceAsync(
+        TestResilienceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return PostAsync<TestResilienceRequest, PaymentDto>(
+            endpoint: "api/v1/payments/test-resilience",
+            request: request,
+            pipeline: ResiliencePipelineKeys.Read, // Using Read pipeline to enable retries for testing
+            useIdempotencyKey: false,
+            cancellationToken: cancellationToken);
+    }
 }

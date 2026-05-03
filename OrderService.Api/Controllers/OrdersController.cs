@@ -82,4 +82,23 @@ public class OrdersController : ControllerBase
 
         return Ok(ApiResult<PaymentProcessResult>.Ok(result.Data!));
     }
+
+    [HttpPost("test-payment-resilience")]
+    public async Task<IActionResult> TestPaymentResilience(
+        [FromServices] Micro.Shared.Clients.Payment.IPaymentServiceClient paymentServiceClient,
+        [FromBody] Micro.Shared.Clients.Payment.DTOs.TestResilienceRequest request,
+        CancellationToken ct)
+    {
+        _logger.LogInformation("Testing payment resilience with Delay={Delay}ms, StatusCode={StatusCode}",
+            request.DelayMilliseconds, request.StatusCode);
+
+        var result = await paymentServiceClient.TestResilienceAsync(request, ct);
+
+        if (!result.Success)
+        {
+            return StatusCode(result.StatusCode ?? 500, result);
+        }
+
+        return Ok(result);
+    }
 }
