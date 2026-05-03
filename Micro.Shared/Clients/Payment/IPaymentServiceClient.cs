@@ -8,4 +8,8 @@ public interface IPaymentServiceClient
     Task<ApiResult<PaymentDto>> CreatePaymentAsync(
         CreatePaymentRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<ApiResult<PaymentDto>> TestResilienceAsync(
+        TestResilienceRequest request,
+        CancellationToken cancellationToken = default);
 }

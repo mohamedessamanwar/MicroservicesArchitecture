@@ -1,0 +1,63 @@
+services:
+  order-service:
+    build:
+      context: .
+      dockerfile: OrderService.Api/Dockerfile
+      args:
+        BUILD_CONFIGURATION: Debug
+    container_name: order-service
+    ports:
+      - "8080:8080"
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
+      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - Services__PaymentService=http://payment-service:8080
+      - DOTNET_ENVIRONMENT=Development
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: Payment.Api/Dockerfile
+    container_name: payment-service
+    ports:
+      - "8081:8080"
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
+      - ConnectionStrings__Egypt__Replica=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false
+      - DOTNET_ENVIRONMENT=Development
+    depends_on:
+      write-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  microservices-network:
+    external: true
