@@ -10,6 +10,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "infrastructure", "infrastructure", "{0945539B-CCB7-4FF9-A749-A26909D4E172}"
 	ProjectSection(SolutionItems) = preProject
 		DockerCompose.yaml = DockerCompose.yaml
+		docker-compose.override.yml = docker-compose.override.yml
+		docker-compose.yml = docker-compose.yml
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OrderService", "OrderService", "{BE209DB8-B8C6-4F2E-B5DB-5577EEC4F219}"
@@ -33,6 +35,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Payment.Core", "Payment.Core\Payment.Core.csproj", "{8286DC37-D947-492D-97E9-EEC997B0CBB0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Micro.Shared", "Micro.Shared\Micro.Shared.csproj", "{2CF71960-E1B4-4FD5-9D79-81A1F2520F2B}"
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{2FD7C04B-7A33-4D74-A9AE-4F0951769F88}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -76,6 +80,10 @@ Global
 		{2CF71960-E1B4-4FD5-9D79-81A1F2520F2B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2CF71960-E1B4-4FD5-9D79-81A1F2520F2B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2CF71960-E1B4-4FD5-9D79-81A1F2520F2B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2FD7C04B-7A33-4D74-A9AE-4F0951769F88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2FD7C04B-7A33-4D74-A9AE-4F0951769F88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2FD7C04B-7A33-4D74-A9AE-4F0951769F88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2FD7C04B-7A33-4D74-A9AE-4F0951769F88}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -92,6 +100,7 @@ Global
 		{84C4FBDB-418D-4B82-BBDE-67891CCF5BBA} = {92C090E1-2D1D-4D65-A6CF-F35D1C8896C9}
 		{8286DC37-D947-492D-97E9-EEC997B0CBB0} = {92C090E1-2D1D-4D65-A6CF-F35D1C8896C9}
 		{2CF71960-E1B4-4FD5-9D79-81A1F2520F2B} = {C5D7EFA3-0F6F-49F7-AC67-FAB3BA3BA5DC}
+		{2FD7C04B-7A33-4D74-A9AE-4F0951769F88} = {0945539B-CCB7-4FF9-A749-A26909D4E172}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6C279851-2F46-4DF2-96CF-2F629B39ADE1}

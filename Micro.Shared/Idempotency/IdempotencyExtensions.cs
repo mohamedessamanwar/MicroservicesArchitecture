@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Micro.Shared.Http.Idempotency;
+namespace Micro.Shared.Idempotency;
 
 public static class IdempotencyExtensions
 {

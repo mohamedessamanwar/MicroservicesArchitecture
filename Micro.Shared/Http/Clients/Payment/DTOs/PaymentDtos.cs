@@ -1,4 +1,4 @@
-namespace Micro.Shared.Clients.Payment.DTOs;
+namespace Micro.Shared.Http.Clients.Payment.DTOs;
 
 public record CreatePaymentRequest(Guid OrderId, decimal Amount);
 

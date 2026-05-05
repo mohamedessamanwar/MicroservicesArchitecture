@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
-using Micro.Shared.Clients.Common;
-using Micro.Shared.Clients.Payment.DTOs;
 using Micro.Shared.Http.Models;
 using Micro.Shared.Http.Policies;
+using Micro.Shared.Http.Clients.Common;
+using Micro.Shared.Http.Clients.Payment.DTOs;
 
-namespace Micro.Shared.Clients.Payment;
+namespace Micro.Shared.Http.Clients.Payment;
 
 public sealed class PaymentServiceClient : DownstreamApiClientBase, IPaymentServiceClient
 {

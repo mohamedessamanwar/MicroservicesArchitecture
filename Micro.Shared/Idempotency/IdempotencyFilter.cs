@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 using System.Text;
 
-namespace Micro.Shared.Http.Idempotency;
+namespace Micro.Shared.Idempotency;
 
 public class IdempotencyFilter : IAsyncActionFilter
 {

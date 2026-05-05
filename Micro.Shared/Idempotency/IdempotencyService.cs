@@ -2,7 +2,7 @@ using Micro.Shared.Caching;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
-namespace Micro.Shared.Http.Idempotency;
+namespace Micro.Shared.Idempotency;
 
 public class IdempotencyService
 {

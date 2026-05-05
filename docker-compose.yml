@@ -1,0 +1,305 @@
+services:
+  # =========================
+  # PostgreSQL (Write DB) - enables logical replication for Debezium
+  # =========================
+  write-db:
+    image: postgres:16-alpine # Base Postgres image
+    container_name: write-db # Friendly container name
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    environment:
+      POSTGRES_USER: admin # DB admin user
+      POSTGRES_PASSWORD: pass # DB admin password
+      POSTGRES_DB: write_db # Default DB created on boot
+    ports:
+      - "5432:5432" # Expose Postgres to host
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist database data
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d write_db"] # Wait until Postgres accepts connections
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =========================
+  # PostgreSQL (Read Replica)
+  # =========================
+  read-db:
+    image: postgres:16-alpine # Replica DB container
+    container_name: read-db # Friendly container name
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+    environment:
+      POSTGRES_USER: admin # DB admin user
+      POSTGRES_PASSWORD: pass # DB admin password
+      POSTGRES_DB: replica_db # Replica DB name
+    ports:
+      - "5433:5432" # Expose replica to host
+    volumes:
+      - read_db_data:/var/lib/postgresql/data # Persist replica data
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d replica_db"] # Wait until Postgres accepts connections
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =========================
+  # Redis
+  # =========================
+  redis:
+    image: redis:7-alpine # Redis base image
+    container_name: redis # Friendly container name
+    command: redis-server --appendonly yes # Enable persistence
+    ports:
+      - "6379:6379" # Expose Redis to host
+    volumes:
+      - redis_data:/data # Persist Redis data
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"] # Validate Redis health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # =========================
+  # RabbitMQ + Management UI
+  # =========================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine # RabbitMQ with management UI
+    container_name: rabbitmq # Friendly container name
+    environment:
+      RABBITMQ_DEFAULT_USER: admin # Default admin user
+      RABBITMQ_DEFAULT_PASS: admin123 # Default admin password
+    ports:
+      - "5672:5672" # AMQP protocol port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq # Persist RabbitMQ data
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"] # Wait for RabbitMQ to be ready
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+
+  # =========================
+  # RabbitMQ Init (Topology)
+  # =========================
+  rabbitmq-init:
+    image: rabbitmq:3-management-alpine # Uses rabbitmqadmin CLI
+    container_name: rabbitmq-init # Friendly container name
+    depends_on:
+      rabbitmq:
+        condition: service_healthy # Run after RabbitMQ is ready
+    networks:
+      - microservices-network # Shared network for all services
+    restart: "no" # Run once and exit
+    command: |
+      sh -c "
+      echo 'Waiting for rabbitmq management API on port 15672...' &&
+      until wget -qO- http://admin:admin123@rabbitmq:15672/api/overview > /dev/null 2>&1; do
+        sleep 2
+      done
+      echo 'Management API is up. Declaring topology...' &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare exchange name=cdc.exchange type=topic durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=order.write.cdc.q durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=payment.write.cdc.q durable=true &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='order-server.public.#' &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=payment.write.cdc.q routing_key='payment-server.public.#' &&
+      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='#' &&
+      echo 'RabbitMQ exchange/queues/wildcard-bindings created.'
+      "
+
+  # =========================
+  # Database Init (Create DBs)
+  # =========================
+  db-init:
+    image: postgres:16-alpine # Uses psql client
+    container_name: db-init # Friendly container name
+    depends_on:
+      write-db:
+        condition: service_healthy # Wait for write DB
+      read-db:
+        condition: service_healthy # Wait for read DB
+    networks:
+      - microservices-network # Shared network for all services
+    restart: "no" # Run once and exit
+    environment:
+      PGHOST: write-db # Target host
+      PGPORT: 5432 # Target port
+      PGUSER: admin # DB user
+      PGPASSWORD: pass # DB password
+      PGDATABASE: postgres # Default DB
+    volumes:
+      - ./compose/db-init/init-db.sh:/scripts/init-db.sh:ro # Init script
+    command: ["sh", "/scripts/init-db.sh"]
+
+  # =========================
+  # Debezium - Order DB
+  # =========================
+  debezium-order:
+    image: debezium/server:2.6 # Debezium server image
+    container_name: debezium-order # Friendly container name
+    depends_on:
+      write-db:
+        condition: service_healthy # Wait for write DB
+      rabbitmq:
+        condition: service_healthy # Wait for RabbitMQ
+      rabbitmq-init:
+        condition: service_completed_successfully # Wait for topology
+      db-init:
+        condition: service_completed_successfully # Wait for DB init
+    networks:
+      - microservices-network # Shared network for all services
+    environment:
+      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
+      - DEBEZIUM_SOURCE_SLOT_NAME=order_slot
+      - DEBEZIUM_SOURCE_PUBLICATION_NAME=order_pub
+      - DEBEZIUM_SOURCE_DATABASE_DBNAME=OrderDb
+      - DEBEZIUM_SOURCE_TOPIC_PREFIX=order-server
+    restart: unless-stopped # Keep Debezium running
+    volumes:
+      - ./debezium/orderdb-application.properties:/debezium/conf/application.properties:ro # Debezium config
+      - debezium_order_data:/debezium/data # Debezium data
+
+  # =========================
+  # Debezium - Payment DB
+  # =========================
+  debezium-payment:
+    image: debezium/server:2.6 # Debezium server image
+    container_name: debezium-payment # Friendly container name
+    depends_on:
+      write-db:
+        condition: service_healthy # Wait for write DB
+      rabbitmq:
+        condition: service_healthy # Wait for RabbitMQ
+      rabbitmq-init:
+        condition: service_completed_successfully # Wait for topology
+      db-init:
+        condition: service_completed_successfully # Wait for DB init
+    networks:
+      - microservices-network # Shared network for all services
+    environment:
+      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
+      - DEBEZIUM_SOURCE_SLOT_NAME=payment_slot
+      - DEBEZIUM_SOURCE_PUBLICATION_NAME=payment_pub
+      - DEBEZIUM_SOURCE_DATABASE_DBNAME=PaymentDb
+      - DEBEZIUM_SOURCE_TOPIC_PREFIX=payment-server
+    restart: unless-stopped # Keep Debezium running
+    volumes:
+      - ./debezium/paymentdb-application.properties:/debezium/conf/application.properties:ro # Debezium config
+      - debezium_payment_data:/debezium/data # Debezium data
+
+  # =========================
+  # Order Service API
+  # =========================
+  order-service:
+    build:
+      context: . # Solution root
+      dockerfile: OrderService.Api/Dockerfile # Order API Dockerfile
+      args:
+        BUILD_CONFIGURATION: Debug # Debug build for VS
+    container_name: order-service # Friendly container name
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=OrderDb;Username=admin;Password=pass; # Egypt write DB
+      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=OrderDb;Username=admin;Password=pass; # Egypt read DB
+      - ConnectionStrings__UAE__Primary=Host=write-db;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass; # UAE write DB (local fallback)
+      - ConnectionStrings__UAE__Replica=Host=read-db;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass; # UAE read DB (local fallback)
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
+    depends_on:
+      write-db:
+        condition: service_healthy # Wait for write DB
+      rabbitmq:
+        condition: service_healthy # Wait for RabbitMQ
+      rabbitmq-init:
+        condition: service_completed_successfully # Wait for topology
+      db-init:
+        condition: service_completed_successfully # Wait for DB init
+      redis:
+        condition: service_healthy # Wait for Redis
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"] # TCP connect check (bash built-in)
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # =========================
+  # Payment Service API
+  # =========================
+  payment-service:
+    build:
+      context: . # Solution root
+      dockerfile: Payment.Api/Dockerfile # Payment API Dockerfile
+      args:
+        BUILD_CONFIGURATION: Debug # Debug build for VS
+    container_name: payment-service # Friendly container name
+    environment:
+      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass; # Egypt write DB
+      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass; # Egypt read DB
+      - ConnectionStrings__UAE__Primary=Host=write-db;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass; # UAE write DB (local fallback)
+      - ConnectionStrings__UAE__Replica=Host=read-db;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass; # UAE read DB (local fallback)
+      - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
+    depends_on:
+      write-db:
+        condition: service_healthy # Wait for write DB
+      rabbitmq:
+        condition: service_healthy # Wait for RabbitMQ
+      rabbitmq-init:
+        condition: service_completed_successfully # Wait for topology
+      db-init:
+        condition: service_completed_successfully # Wait for DB init
+      redis:
+        condition: service_healthy # Wait for Redis
+    networks:
+      - microservices-network # Shared network for all services
+
+  # =========================
+  # Replica Setup (Subscription)
+  # =========================
+  replica-setup:
+    image: postgres:16-alpine # Uses psql client
+    container_name: replica-setup # Friendly container name
+    depends_on:
+      read-db:
+        condition: service_healthy # Wait for replica DB
+    networks:
+      - microservices-network # Shared network for all services
+    environment:
+      PGPASSWORD: pass # DB password
+    restart: "no" # Run once and exit
+    volumes:
+      - ./compose/db-init/replica-setup.sh:/scripts/replica-setup.sh:ro # Replica setup script
+    command: ["sh", "/scripts/replica-setup.sh"]
+
+volumes:
+  postgres_data: # Write DB volume
+  read_db_data: # Replica DB volume
+  redis_data: # Redis volume
+  rabbitmq_data: # RabbitMQ volume
+  debezium_order_data: # Debezium order volume
+  debezium_payment_data: # Debezium payment volume
+
+networks:
+  microservices-network:
+    driver: bridge # Shared bridge network

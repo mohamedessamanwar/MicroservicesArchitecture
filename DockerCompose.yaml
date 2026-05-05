@@ -128,30 +128,9 @@ services:
       PGUSER: admin
       PGPASSWORD: pass
       PGDATABASE: postgres
-    command: |
-      sh -c "
-      echo 'Creating databases on Primary (write-db)...' &&
-      psql -h write-db -c 'CREATE DATABASE \"OrderDb\";' 2>&1 | grep -v 'already exists' || true &&
-      psql -h write-db -c 'CREATE DATABASE \"PaymentDb\";' 2>&1 | grep -v 'already exists' || true &&
-
-      
-      echo 'Creating OrderDb on Replica (read-db)...' &&
-      psql -h read-db -c 'CREATE DATABASE \"OrderDb\";' 2>&1 | grep -v 'already exists' || true &&
-      psql -h read-db -c 'CREATE DATABASE \"PaymentDb\";' 2>&1 | grep -v 'already exists' || true &&
-
-
-      echo 'Setting up logical replication publications on primary...' &&
-      psql -h write-db -d OrderDb -c \"DROP PUBLICATION IF EXISTS order_pub;\" &&
-      psql -h write-db -d OrderDb -c \"CREATE PUBLICATION order_pub FOR ALL TABLES;\" &&
-      psql -h write-db -d PaymentDb -c \"DROP PUBLICATION IF EXISTS payment_pub;\" &&
-      psql -h write-db -d PaymentDb -c \"CREATE PUBLICATION payment_pub FOR ALL TABLES;\" &&
-      
-      echo 'Ensuring Replica Identity on key tables...' &&
-      # This ensures UPDATE/DELETE events are captured fully
-      psql -h write-db -d OrderDb -c \"ALTER TABLE IF EXISTS \\\"Orders\\\" REPLICA IDENTITY FULL;\" || true &&
-      
-      echo 'Databases and Publications setup completed.'
-      "
+    volumes:
+      - ./compose/db-init/init-db.sh:/scripts/init-db.sh:ro
+    command: ["sh", "/scripts/init-db.sh"]
 
   # =========================
   # PostgreSQL (Read Replica) - Asynchronous Logical Replica
@@ -169,6 +148,8 @@ services:
       POSTGRES_DB: replica_db
     ports:
       - "5433:5432"
+    volumes:
+      - read_db_data:/var/lib/postgresql/data
     networks:
       - microservices-network
     healthcheck:
@@ -323,31 +304,13 @@ services:
     environment:
       PGPASSWORD: pass
     restart: "no"
-    command: |
-      sh -c "
-      echo 'Waiting for OrderService to apply migrations to replica...' &&
-      until psql -h read-db -U admin -d OrderDb -c 'SELECT count(*) FROM \"Orders\";' > /dev/null 2>&1; do
-        echo 'Waiting for tables on read-db...'
-        sleep 5
-      done
-      
-      echo 'Schema detected. Checking for subscription...'
-      if psql -h read-db -U admin -d OrderDb -tAc \"SELECT 1 FROM pg_subscription WHERE subname = 'order_sub'\" | grep -q 1; then
-        echo 'Subscription order_sub already exists. Skipping.'
-      else
-        echo 'Cleaning up potential stale slots on Primary...'
-        psql -h write-db -U admin -d OrderDb -c \"SELECT pg_drop_replication_slot('order_sub') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'order_sub');\" || true
-        
-        echo 'Creating subscription...'
-        psql -h read-db -U admin -d OrderDb -c \"CREATE SUBSCRIPTION order_sub CONNECTION 'host=write-db port=5432 user=admin password=pass dbname=OrderDb' PUBLICATION order_pub;\" && \
-        echo 'Subscription created.'
-      fi
-      
-      echo 'Logical replication automated successfully.'
-      "
+    volumes:
+      - ./compose/db-init/replica-setup.sh:/scripts/replica-setup.sh:ro
+    command: ["sh", "/scripts/replica-setup.sh"]
 
 volumes:
   postgres_data:
+  read_db_data:
   redis_data:
   rabbitmq_data:
   debezium_order_data:

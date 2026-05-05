@@ -1,4 +1,4 @@
-namespace Micro.Shared.Clients.Order.DTOs;
+namespace Micro.Shared.Http.Clients.Order.DTOs;
 
 public record UpdateOrderStatusRequest(OrderStatus Status);
 

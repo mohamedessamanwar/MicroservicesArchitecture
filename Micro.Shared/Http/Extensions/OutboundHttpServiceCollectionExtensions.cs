@@ -3,25 +3,19 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Micro.Shared.Clients.Order;
-using Micro.Shared.Clients.Payment;
 using Micro.Shared.Http.Configuration;
 using Micro.Shared.Http.Handlers;
 using Micro.Shared.Http.Policies;
+using Micro.Shared.Http.Clients.Order;
+using Micro.Shared.Http.Clients.Payment;
 
 namespace Micro.Shared.Http.Extensions;
 
 public static class OutboundHttpServiceCollectionExtensions
 {
-    public static IServiceCollection AddOutboundHttpInfrastructure(this IServiceCollection services, string appId)
+    public static IServiceCollection AddOutboundHttpInfrastructure(this IServiceCollection services)
     {
         services.TryAddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-
-        services.AddTransient<HeaderPropagationHandler>(_ =>
-            new HeaderPropagationHandler(
-                _.GetRequiredService<IHttpContextAccessor>(),
-                appId));
-
         return services;
     }
 
@@ -63,12 +57,13 @@ public static class OutboundHttpServiceCollectionExtensions
                 PooledConnectionIdleTimeout = TimeSpan.FromSeconds(options.PooledConnectionIdleTimeoutSeconds),
                 ConnectTimeout = TimeSpan.FromSeconds(options.ConnectTimeoutSeconds),
             })
-            .AddHttpMessageHandler<HeaderPropagationHandler>()
+            .AddHttpMessageHandler(sp => new HeaderPropagationHandler(
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                options.CallerIdentity))
             .AddPolicyHandler((sp, request) =>
             {
                 var logger = sp.GetRequiredService<ILogger<TImplementation>>();
                 var pipelineKey = ResiliencePipelineSelector.Resolve(request);
-
                 return HttpClientResiliencePolicyFactory.GetOrCreate(
                     clientName,
                     pipelineKey,
@@ -86,6 +81,7 @@ public static class OutboundHttpServiceCollectionExtensions
     {
         var options = new DownstreamHttpClientOptions();
 
+        configuration.GetSection("OutboundHttp:CallerIdentity").Bind(options.CallerIdentity);
         configuration.GetSection("OutboundHttp:Defaults").Bind(options);
         configuration.GetSection($"OutboundHttp:Clients:{clientName}").Bind(options);
 
@@ -98,6 +94,21 @@ public static class OutboundHttpServiceCollectionExtensions
         {
             throw new InvalidOperationException(
                 $"Missing outbound base URL for {clientName}. Configure OutboundHttp:Clients:{clientName}:BaseUrl or {fallbackBaseUrlConfigKey}.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.CallerIdentity.AppId))
+        {
+            options.CallerIdentity.AppId =
+                configuration["OutboundHttp:CallerIdentity:AppId"] ??
+                configuration["ServiceIdentity:AppId"] ??
+                configuration["App:AppId"] ??
+                string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.CallerIdentity.AppId))
+        {
+            throw new InvalidOperationException(
+                $"Missing outbound AppId for {clientName}. Configure OutboundHttp:CallerIdentity:AppId or OutboundHttp:Clients:{clientName}:CallerIdentity:AppId.");
         }
 
         return options;

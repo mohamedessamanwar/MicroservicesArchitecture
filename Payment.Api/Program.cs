@@ -4,10 +4,11 @@ using Payment.Infrastructure;
 using Payment.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Micro.Shared.Http.Extensions;
+
 using Micro.Shared.Middleware;
 using Micro.Shared.Caching;
-using Micro.Shared.Http.Idempotency;
 using Micro.Shared.Persistence;
+using Micro.Shared.Idempotency;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,8 +25,9 @@ builder.Services.AddRedisCaching(builder.Configuration);
 builder.Services.AddIdempotency();
 
 // Microservice Clients
-builder.Services.AddOutboundHttpInfrastructure(builder.Environment.ApplicationName);
+builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddOrderServiceClient(builder.Configuration);
+
 
 var app = builder.Build();
 
@@ -76,6 +78,7 @@ app.UseMiddleware<CountryMiddleware>();
 app.UseMiddleware<OperationModeMiddleware>();
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

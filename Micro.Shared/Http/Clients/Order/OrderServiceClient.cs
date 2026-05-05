@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
-using Micro.Shared.Clients.Common;
-using Micro.Shared.Clients.Order.DTOs;
 using Micro.Shared.Http.Models;
 using Micro.Shared.Http.Policies;
+using Micro.Shared.Http.Clients.Common;
+using Micro.Shared.Http.Clients.Order.DTOs;
 
-namespace Micro.Shared.Clients.Order;
+namespace Micro.Shared.Http.Clients.Order;
 
 public sealed class OrderServiceClient : DownstreamApiClientBase, IOrderServiceClient
 {

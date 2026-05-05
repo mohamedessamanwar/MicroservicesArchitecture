@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 using System.Net;
 
-namespace Micro.Shared.Http.Idempotency;
+namespace Micro.Shared.Idempotency;
 
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
 public class IdempotentAttribute : Attribute, IFilterFactory

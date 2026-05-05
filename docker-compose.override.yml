@@ -1,0 +1,27 @@
+services:
+  # =========================
+  # Order Service (local debug)
+  # =========================
+  order-service:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development # Use Development settings
+      ASPNETCORE_URLS: http://+:8080 # Bind HTTP inside container
+      ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
+      DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
+      VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
+    ports:
+      - "8080:8080" # Order HTTP
+      - "4024:4024" # VS debugger port
+
+  # =========================
+  # Payment Service (local debug)
+  # =========================
+  payment-service:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development # Use Development settings
+      ASPNETCORE_URLS: http://+:8080 # Bind HTTP inside container
+      ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
+      DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
+      VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
+    ports:
+      - "8082:8080" # Payment HTTP

@@ -1,4 +1,4 @@
-namespace Micro.Shared.Http.Idempotency;
+namespace Micro.Shared.Idempotency;
 
 public class IdempotencyResult
 {

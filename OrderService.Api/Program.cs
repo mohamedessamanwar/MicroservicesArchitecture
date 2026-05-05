@@ -3,6 +3,7 @@ using OrderService.Infrastructure;
 using OrderService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Micro.Shared.Http.Extensions;
+
 using Micro.Shared.Middleware;
 using Micro.Shared.Persistence;
 
@@ -18,8 +19,9 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Shared components
-builder.Services.AddOutboundHttpInfrastructure(builder.Environment.ApplicationName);
+builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddPaymentServiceClient(builder.Configuration);
+
 
 var app = builder.Build();
 
@@ -34,6 +36,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CountryMiddleware>();
 app.UseMiddleware<OperationModeMiddleware>();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

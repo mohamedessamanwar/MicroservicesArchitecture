@@ -4,6 +4,8 @@ public sealed class DownstreamHttpClientOptions
 {
     public string BaseUrl { get; set; } = string.Empty;
 
+    public OutboundCallerIdentityOptions CallerIdentity { get; set; } = new();
+
     // Max concurrent TCP connections per downstream host.
     public int MaxConnectionsPerServer { get; set; } = 64;
 

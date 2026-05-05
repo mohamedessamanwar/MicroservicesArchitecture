@@ -4,7 +4,8 @@ using Payment.Application.Commands;
 using Payment.Application.DTOs;
 using Payment.Application.Common;
 using Payment.Core.Entities;
-using Micro.Shared.Http.Idempotency;
+using Micro.Shared.Idempotency;
+
 
 namespace Payment.Api.Controllers;
 

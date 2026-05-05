@@ -1,18 +1,21 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Http;
+using Micro.Shared.Http.Configuration;
 
 namespace Micro.Shared.Http.Handlers;
 
 public class HeaderPropagationHandler : DelegatingHandler
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly string _appId;
+    private readonly OutboundCallerIdentityOptions _callerIdentity;
 
     public HeaderPropagationHandler(
-        IHttpContextAccessor httpContextAccessor, 
-        string appId)
+        IHttpContextAccessor httpContextAccessor,
+        OutboundCallerIdentityOptions callerIdentity)
     {
         _httpContextAccessor = httpContextAccessor;
-        _appId = appId;
+        _callerIdentity = callerIdentity;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -27,16 +30,10 @@ public class HeaderPropagationHandler : DelegatingHandler
             PropagateHeader(context, request, "Authorization");
             PropagateHeader(context, request, "X-Correlation-Id");
             PropagateHeader(context, request, "X-Country");
-            PropagateHeader(context, request, "traceparent");
-            PropagateHeader(context, request, "tracestate");
-            PropagateHeader(context, request, "baggage");
         }
 
         // Add default Application Identity header
-        if (!request.Headers.Contains("X-App-Id"))
-        {
-            request.Headers.Add("X-App-Id", _appId);
-        }
+        AddAppIdentityHeaders(request);
 
         return await base.SendAsync(request, cancellationToken);
     }
@@ -47,5 +44,41 @@ public class HeaderPropagationHandler : DelegatingHandler
         {
             request.Headers.Add(headerName, values.ToArray());
         }
+    }
+
+    private void AddAppIdentityHeaders(HttpRequestMessage request)
+    {
+        if (!string.IsNullOrWhiteSpace(_callerIdentity.AppId) &&
+            !request.Headers.Contains(_callerIdentity.AppIdHeaderName))
+        {
+            request.Headers.Add(_callerIdentity.AppIdHeaderName, _callerIdentity.AppId);
+        }
+
+        if (!_callerIdentity.EnableSignature || string.IsNullOrWhiteSpace(_callerIdentity.SharedSecret))
+        {
+            return;
+        }
+
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var path = request.RequestUri?.PathAndQuery ?? string.Empty;
+        var payload = $"{_callerIdentity.AppId}\n{request.Method.Method}\n{path}\n{timestamp}";
+        var signature = ComputeSignature(_callerIdentity.SharedSecret, payload);
+
+        if (!request.Headers.Contains(_callerIdentity.TimestampHeaderName))
+        {
+            request.Headers.Add(_callerIdentity.TimestampHeaderName, timestamp);
+        }
+
+        if (!request.Headers.Contains(_callerIdentity.SignatureHeaderName))
+        {
+            request.Headers.Add(_callerIdentity.SignatureHeaderName, signature);
+        }
+    }
+
+    private static string ComputeSignature(string secret, string payload)
+    {
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

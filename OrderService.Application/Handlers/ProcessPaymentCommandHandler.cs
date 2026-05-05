@@ -3,9 +3,10 @@ using Microsoft.Extensions.Logging;
 using OrderService.Application.Common;
 using OrderService.Domain.Interfaces;
 using OrderService.Domain.Entities;
-using Micro.Shared.Clients.Payment;
-using Micro.Shared.Clients.Payment.DTOs;
+
 using OrderService.Application.Commands;
+using Micro.Shared.Http.Clients.Payment;
+using Micro.Shared.Http.Clients.Payment.DTOs;
 
 namespace OrderService.Application.Handlers;
 

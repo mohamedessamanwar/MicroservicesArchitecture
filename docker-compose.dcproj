@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.Docker.Sdk">
+  <PropertyGroup Label="Globals">
+    <ProjectVersion>2.1</ProjectVersion>
+    <DockerTargetOS>Linux</DockerTargetOS>
+    <DockerPublishLocally>false</DockerPublishLocally>
+    <DockerComposeProjectPath>docker-compose.yml</DockerComposeProjectPath>
+    <DockerComposeProjectName>microservicesarchitecture</DockerComposeProjectName>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="docker-compose.yml" />
+    <None Include="docker-compose.override.yml" />
+  </ItemGroup>
+</Project>

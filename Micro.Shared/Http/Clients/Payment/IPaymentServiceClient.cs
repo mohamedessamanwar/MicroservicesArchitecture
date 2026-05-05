@@ -1,7 +1,7 @@
-using Micro.Shared.Clients.Payment.DTOs;
+using Micro.Shared.Http.Clients.Payment.DTOs;
 using Micro.Shared.Http.Models;
 
-namespace Micro.Shared.Clients.Payment;
+namespace Micro.Shared.Http.Clients.Payment;
 
 public interface IPaymentServiceClient
 {

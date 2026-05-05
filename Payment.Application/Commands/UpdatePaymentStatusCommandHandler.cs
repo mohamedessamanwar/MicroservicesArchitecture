@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 using Payment.Application.Common;
 using Payment.Application.Interfaces;
 using Payment.Core.Entities;
-using Micro.Shared.Clients.Order;
-using Micro.Shared.Clients.Order.DTOs;
+using Micro.Shared.Http.Clients.Order;
+using Micro.Shared.Http.Clients.Order.DTOs;
 
 namespace Payment.Application.Commands;
 
@@ -51,8 +51,8 @@ public class UpdatePaymentStatusCommandHandler
                 "Synchronizing order {OrderId} status based on payment status",
                 payment.OrderId);
             var orderStatus = payment.Status == PaymentStatus.Completed
-                ? Micro.Shared.Clients.Order.DTOs.OrderStatus.Paid     // Payment completed -> Order paid
-                : Micro.Shared.Clients.Order.DTOs.OrderStatus.Failed;  // Payment failed -> Order failed
+                ? OrderStatus.Paid     // Payment completed -> Order paid
+                : OrderStatus.Failed;  // Payment failed -> Order failed
 
             var orderRequest = new UpdateOrderStatusRequest(orderStatus);
             var orderResult = await _orderService.UpdateOrderStatusAsync(
