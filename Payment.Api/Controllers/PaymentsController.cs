@@ -23,9 +23,7 @@ public class PaymentsController : ControllerBase
     }
 
     [HttpPost]
-    [Idempotent(ExpirationHours = 1)]
-    [ProducesResponseType(typeof(ApiResult<PaymentResponseDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResult<PaymentResponseDto>), StatusCodes.Status400BadRequest)]
+   // [Idempotent(ExpirationHours = 1)]
     public async Task<IActionResult> Create([FromBody] CreatePaymentDto dto)
     {
         var command = new CreatePaymentCommand(dto);

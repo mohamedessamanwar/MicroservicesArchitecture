@@ -18,6 +18,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddFluentValidationAutoValidation();
 
+if (EF.IsDesignTime)
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentDatabase")));
+}
+
 // Layer registrations
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);

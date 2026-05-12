@@ -23,7 +23,6 @@ public class CreatePaymentCommandHandler : IRequestHandler<CreatePaymentCommand,
         var payment = _mapper.Map<Core.Entities.Payment>(request.Dto);
         var created = await _paymentRepository.AddAsync(payment, cancellationToken);
         var responseDto = _mapper.Map<PaymentResponseDto>(created);
-
         return CommandResult<PaymentResponseDto>.Ok(responseDto, "Payment created successfully");
     }
 }
