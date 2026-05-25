@@ -1,6 +1,7 @@
+using Micro.Shared.Caching.Repo;
 using Microsoft.Extensions.Logging;
 
-namespace Micro.Shared.Caching;
+namespace Micro.Shared.Caching.Services;
 
 public interface ICacheService
 {
@@ -27,7 +28,6 @@ public interface ICacheService
         CancellationToken cancellationToken = default) where T : class;
     Task<bool> InvalidateAsync(string key, CancellationToken cancellationToken = default);
     Task<long> InvalidateMultipleAsync(string[] keys, CancellationToken cancellationToken = default);
-    Task<long> InvalidateByPatternAsync(string pattern, CancellationToken cancellationToken = default);
 }
 public class CacheService : ICacheService
 {
@@ -221,18 +221,5 @@ public class CacheService : ICacheService
         }
     }
 
-    public async Task<long> InvalidateByPatternAsync(string pattern, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var count = await _redis.KeyDeleteByPatternAsync(pattern, cancellationToken);
-            _logger.LogWarning("Pattern-based cache invalidation: {Count} keys invalidated for pattern: {Pattern}", count, pattern);
-            return count;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in pattern-based cache invalidation for pattern: {Pattern}", pattern);
-            throw;
-        }
-    }
+ 
 }

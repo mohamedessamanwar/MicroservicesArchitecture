@@ -1,6 +1,6 @@
 using StackExchange.Redis;
 
-namespace Micro.Shared.Caching;
+namespace Micro.Shared.Caching.Repo;
 
 public interface IRedisRepository
 {
@@ -60,9 +60,10 @@ public interface IRedisRepository
     Task<long> KeyDeleteMultipleAsync(string[] keys, CancellationToken cancellationToken = default);
     Task<bool> KeyExpireAsync(string key, TimeSpan expiry, CancellationToken cancellationToken = default);
     Task<TimeSpan?> KeyTimeToLiveAsync(string key, CancellationToken cancellationToken = default);
-    Task<long> KeyDeleteByPatternAsync(string pattern, CancellationToken cancellationToken = default);
 
     #endregion
+
+
 
     #region Database Operations
     IDatabase GetDatabase();

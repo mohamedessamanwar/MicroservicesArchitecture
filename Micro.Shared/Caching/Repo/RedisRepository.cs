@@ -1,10 +1,9 @@
 using StackExchange.Redis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+namespace Micro.Shared.Caching.Repo;
 
-namespace Micro.Shared.Caching;
-
-public class RedisRepository : IRedisRepository
+public partial class RedisRepository : IRedisRepository
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly IDatabase _database;
@@ -578,33 +577,7 @@ public class RedisRepository : IRedisRepository
         }
     }
 
-    public async Task<long> KeyDeleteByPatternAsync(string pattern, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var endpoints = _redis.GetEndPoints();
-            var server = _redis.GetServer(endpoints.First());
-
-            var keys = server.Keys(pattern: pattern).ToArray();
-
-            if (keys.Length == 0)
-            {
-                _logger.LogDebug("No keys found matching pattern: {Pattern}", pattern);
-                return 0;
-            }
-
-            var count = await _database.KeyDeleteAsync(keys);
-
-            _logger.LogWarning("Pattern-based cache invalidation: {Count} keys deleted for pattern: {Pattern}", count, pattern);
-
-            return count;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting keys by pattern: {Pattern}", pattern);
-            throw;
-        }
-    }
+   
 
     #endregion
 

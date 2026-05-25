@@ -1,4 +1,4 @@
-using Micro.Shared.Caching;
+using Micro.Shared.Caching.Repo;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 

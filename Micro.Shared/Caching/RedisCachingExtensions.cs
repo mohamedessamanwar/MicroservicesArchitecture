@@ -1,3 +1,5 @@
+using Micro.Shared.Caching.Repo;
+using Micro.Shared.Caching.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
@@ -30,29 +32,5 @@ public static class RedisCachingExtensions
 
         return services;
     }
-    public static IServiceCollection AddRedisCaching(
-        this IServiceCollection services,
-        Action<ConfigurationOptions> configureOptions)
-    {
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
-        {
-            var options = new ConfigurationOptions
-            {
-                AbortOnConnectFail = false,
-                ConnectRetry = 3,
-                ConnectTimeout = 5000,
-                SyncTimeout = 5000,
-                AsyncTimeout = 5000,
-                KeepAlive = 60
-            };
-
-            configureOptions(options);
-
-            return ConnectionMultiplexer.Connect(options);
-        });
-        services.AddScoped<IRedisRepository, RedisRepository>();
-        services.AddScoped<ICacheService, CacheService>();
-
-        return services;
-    }
+    
 }

@@ -98,53 +98,37 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
                         _channel.BasicAck(ea.DeliveryTag, false);
                         return;
                     }
-
                     using var scope = _scopeFactory.CreateScope();
                     var inboxStore = scope.ServiceProvider.GetRequiredService<IInboxStore>();
                     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
                     if (await inboxStore.ExistsAsync(messageId, stoppingToken))
                     {
                         _logger.LogInformation("Duplicate message detected; acking. MessageId={MessageId}", messageId);
                         _channel.BasicAck(ea.DeliveryTag, false);
                         return;
                     }
-
                     var messageJson = Encoding.UTF8.GetString(ea.Body.ToArray());
                     var baseEvent = DeserializeBaseEvent(messageJson);
-
                     var executionStrategy = db.Database.CreateExecutionStrategy();
-                    await executionStrategy.ExecuteAsync(async () =>
+                    await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
+                    await InvokeConsumerAsync(baseEvent, scope.ServiceProvider, stoppingToken);
+                    db.InboxMessages.Add(new InboxMessage
                     {
-                        await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
-                        await InvokeConsumerAsync(baseEvent, scope.ServiceProvider, stoppingToken);
-
-                        db.InboxMessages.Add(new InboxMessage
-                        {
-                            Id = Guid.NewGuid(),
-                            MessageId = messageId,
-                            EventType = baseEvent.EventType,
-                            ProcessedOnUtc = DateTime.UtcNow
-                        });
-
-                        await db.SaveChangesAsync(stoppingToken);
-                        await transaction.CommitAsync(stoppingToken);
+                        Id = Guid.NewGuid(),
+                        MessageId = messageId,
+                        EventType = baseEvent.EventType,
+                        ProcessedOnUtc = DateTime.UtcNow
                     });
 
+                    await db.SaveChangesAsync(stoppingToken);
+                    await transaction.CommitAsync(stoppingToken);
                     _channel.BasicAck(ea.DeliveryTag, false);
                     _logger.LogInformation("Message processed successfully. MessageId={MessageId}, EventType={EventType}", messageId, baseEvent.EventType);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Consumer job failed; nacking without requeue. DeliveryTag={DeliveryTag}", ea.DeliveryTag);
-                    try
-                    {
+                        _logger.LogError(ex, "Consumer job failed; nacking without requeue. DeliveryTag={DeliveryTag}", ea.DeliveryTag);
                         _channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: false);
-                    }
-                    catch (Exception nackEx)
-                     {
-                         _logger.LogError(nackEx, "Failed to nack message. DeliveryTag={DeliveryTag}", ea.DeliveryTag);
-                     }
                  }
              };
 

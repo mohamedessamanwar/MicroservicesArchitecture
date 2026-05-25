@@ -26,5 +26,4 @@ echo "Creating publications on write-db..."
 psql -h write-db -U admin -d OrderDb -c "CREATE PUBLICATION order_pub FOR ALL TABLES;" || true
 psql -h write-db -U admin -d PaymentDb -c "CREATE PUBLICATION payment_pub FOR ALL TABLES;" || true
 psql -h write-db -U admin -d \"PaymentDb-uae\" -c "CREATE PUBLICATION payment_uae_pub FOR ALL TABLES;" || true
-
 echo "Done."
