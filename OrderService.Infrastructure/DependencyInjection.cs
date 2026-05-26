@@ -8,6 +8,9 @@ using OrderService.Infrastructure.Repositories;
 using OrderService.Infrastructure.Dependency;
 using Micro.Shared.Persistence;
 using OrderService.Infrastructure.Data;
+using Micro.Shared.MetricServices.Abstractions;
+using OrderService.Infrastructure.MetricServices;
+using Micro.Shared.MetricServices.Extensions;
 
 namespace OrderService.Infrastructure;
 
@@ -20,25 +23,18 @@ public static class DependencyInjection
         services.AddSharedPersistence();
         services.AddAppDbContext<AppDbContext>();
 
+        // Register metric services
+        services.AddMetricServices(configuration);
+        services.AddMonitoringDbConnectionFactory<AppDbContext>();
+
+        services.AddScoped<IRuntimeMetricSnapshotRepository, RuntimeMetricSnapshotRepository>();
+        services.AddScoped<ISpikeReportRepository, SpikeReportRepository>();
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.Configure<RabbitMqConfiguration>(
             configuration.GetSection(RabbitMqConfiguration.SectionName));
 
-        //// Single connection per application (Singleton)
-        //services.AddSingleton<IRabbitMQConnectionManager, RabbitMQConnectionManager>();
-        //services.AddSingleton<RabbitMQTopologyInitializer>();
-        //services.AddHostedService<RabbitMQTopologyHostedService>();
-
-        //services.AddSingleton<ICdcEventHandler, OrdersCreateHandler>();
-        //services.AddSingleton<ICdcEventHandler, OrdersUpdateHandler>();
-        ////services.AddSingleton<ICdcEventHandler, OrdersDeleteHandler>();
-        //services.AddSingleton<ICdcEventHandlerResolver, CdcEventHandlerResolver>();
-        //services.AddSingleton<IMessageHandler, CdcMessageHandler>();
-        //services.AddHostedService<CDCConsumerService>();
         services.AddMessagingV2(configuration);
         services.AddOrderMessagingConsumerJobs();
-        //services.AddHostedService<RabbitMQConsumer>();
-        //services.AddHostedService<RabbitMQDispatcher>();
 
         return services;
     }

@@ -1,10 +1,10 @@
 using OrderService.Application;
 using OrderService.Infrastructure;
 using OrderService.Infrastructure.Data;
-using OrderService.Api.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Micro.Shared.Caching;
 using Micro.Shared.Http.Extensions;
+
 
 using Micro.Shared.Middleware;
 using Micro.Shared.Persistence;
@@ -22,10 +22,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 // StackExchange.Redis: single ConnectionMultiplexer (Singleton) + scoped IRedisRepository using shared IDatabase.
 builder.Services.AddRedisCaching(builder.Configuration);
-builder.Services.AddSingleton<RuntimeMetricsStore>();
-builder.Services.AddSingleton<IRuntimeMetricsService, RuntimeMetricsService>();
 builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddPaymentServiceClient(builder.Configuration);
+
 
 
 var app = builder.Build();
@@ -39,7 +38,6 @@ if (app.Environment.IsDevelopment())
 
 // Global exception handler is outermost so it can convert any downstream failure to a safe JSON body.
 app.UseRouting();
-app.UseMiddleware<RuntimeRequestMetricsMiddleware>();
 // Custom Middlewares for Multi-tenancy and DB Routing
 app.UseMiddleware<CountryMiddleware>();
 app.UseMiddleware<OperationModeMiddleware>();

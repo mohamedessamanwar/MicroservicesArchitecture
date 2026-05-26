@@ -17,6 +17,8 @@ public class AppDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<RuntimeMetricSnapshotRecord> RuntimeMetricSnapshots => Set<RuntimeMetricSnapshotRecord>();
+    public DbSet<SpikeReportRecord> SpikeReports => Set<SpikeReportRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,5 +55,26 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Payload).IsRequired();
             entity.HasIndex(e => new { e.Status, e.OccurredOnUtc });
         });
+
+        modelBuilder.Entity<RuntimeMetricSnapshotRecord>(entity =>
+        {
+            entity.ToTable("RuntimeMetricSnapshots");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.CapturedAtUtc);
+        });
+
+        modelBuilder.Entity<SpikeReportRecord>(entity =>
+        {
+            entity.ToTable("SpikeReports");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Reasons).IsRequired();
+            entity.HasIndex(e => e.DetectedAtUtc);
+            entity.HasOne(e => e.Snapshot)
+                .WithMany()
+                .HasForeignKey(e => e.RuntimeMetricSnapshotId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+       
     }
 }

@@ -4,6 +4,7 @@ using Payment.Infrastructure.Data;
 using Payment.Application.Interfaces;
 using Payment.Infrastructure.Repositories;
 using Micro.Shared.Persistence;
+using Micro.Shared.MetricServices.Extensions;
 
 namespace Payment.Infrastructure;
 
@@ -14,6 +15,10 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddSharedPersistence();
         services.AddAppDbContext<AppDbContext>();
+
+        // Register metric services
+        services.AddMetricServices(configuration);
+        services.AddMonitoringDbConnectionFactory<AppDbContext>();
 
         services.AddScoped<IPaymentRepository, EfPaymentRepository>();
 
