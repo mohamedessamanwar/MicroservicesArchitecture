@@ -58,12 +58,36 @@ services:
       start_period: 20s
 
   # =========================
+  # PgBouncer
+  # =========================
+  pgbouncer:
+    build:
+      context: ./compose/pgbouncer
+      dockerfile: Dockerfile
+    container_name: pgbouncer
+    depends_on:
+      write-db:
+        condition: service_healthy
+      read-db:
+        condition: service_healthy
+    ports:
+      - "6432:6432"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U admin -d OrderDb"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # =========================
   # Redis
   # =========================
   redis:
     image: redis:7-alpine # Redis base image
     container_name: redis # Friendly container name
-    command: redis-server --appendonly yes # Enable persistence
+    command: redis-server --appendonly yes --appendfsync everysec --save 300 1 # Enable AOF + snapshot every 5 minutes
     ports:
       - "6379:6379" # Expose Redis to host
     volumes:
@@ -219,14 +243,14 @@ services:
         BUILD_CONFIGURATION: Debug # Debug build for VS
     container_name: order-service # Friendly container name
     environment:
-      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=OrderDb;Username=admin;Password=pass; # Egypt write DB
-      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=OrderDb;Username=admin;Password=pass; # Egypt read DB
-      - ConnectionStrings__UAE__Primary=Host=write-db;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass; # UAE write DB (local fallback)
-      - ConnectionStrings__UAE__Replica=Host=read-db;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass; # UAE read DB (local fallback)
+      - ConnectionStrings__Egypt__Primary=Host=pgbouncer;Port=6432;Database=OrderDb;Username=admin;Password=pass; # Egypt write DB through PgBouncer
+      - ConnectionStrings__Egypt__Replica=Host=pgbouncer;Port=6432;Database=OrderDbReplica;Username=admin;Password=pass; # Egypt read DB through PgBouncer
+      - ConnectionStrings__UAE__Primary=Host=pgbouncer;Port=6432;Database=OrderDbUae;Username=admin;Password=pass; # UAE write DB through PgBouncer
+      - ConnectionStrings__UAE__Replica=Host=pgbouncer;Port=6432;Database=OrderDbUaeReplica;Username=admin;Password=pass; # UAE read DB through PgBouncer
       - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
     depends_on:
-      write-db:
-        condition: service_healthy # Wait for write DB
+      pgbouncer:
+        condition: service_healthy # Wait for PgBouncer
       rabbitmq:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
@@ -255,14 +279,11 @@ services:
         BUILD_CONFIGURATION: Debug # Debug build for VS
     container_name: payment-service # Friendly container name
     environment:
-      - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass; # Egypt write DB
-      - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass; # Egypt read DB
-      - ConnectionStrings__UAE__Primary=Host=write-db;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass; # UAE write DB (local fallback)
-      - ConnectionStrings__UAE__Replica=Host=read-db;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass; # UAE read DB (local fallback)
+      - ConnectionStrings__PaymentDatabase=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Payment DB through PgBouncer
       - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
     depends_on:
-      write-db:
-        condition: service_healthy # Wait for write DB
+      pgbouncer:
+        condition: service_healthy # Wait for PgBouncer
       rabbitmq:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:

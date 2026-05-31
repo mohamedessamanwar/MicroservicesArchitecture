@@ -6,6 +6,9 @@ echo "Creating databases on write-db if missing..."
 psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'OrderDb'" | grep -q 1 \
   || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "OrderDb";'
 
+psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb'" | grep -q 1 \
+  || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb";'
+
 psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb-uae'" | grep -q 1 \
   || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb-uae";'
 

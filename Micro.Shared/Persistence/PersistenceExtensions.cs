@@ -15,12 +15,20 @@ public static class PersistenceExtensions
 
     public static IServiceCollection AddAppDbContext<TContext>(this IServiceCollection services)
         where TContext : DbContext
+        => services.AddSharedPostgresDbContext<TContext>();
+
+    public static IServiceCollection AddSharedPostgresDbContext<TContext>(this IServiceCollection services)
+        where TContext : DbContext
     {
         services.AddDbContext<TContext>((sp, options) =>
         {
             var resolver = sp.GetRequiredService<IConnectionStringResolver>();
             var connectionString = resolver.Resolve();
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsqlOptions =>
+            {
+                npgsqlOptions.CommandTimeout(30);
+                npgsqlOptions.EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null);
+            });
         });
 
         return services;

@@ -1,6 +1,6 @@
-//using Microsoft.Extensions.Logging;
+﻿//using Microsoft.Extensions.Logging;
 //using Microsoft.Extensions.Options;
-//using OrderService.Infrastructure.MessagingV2;
+//using OrderService.Infrastructure.RabbitImplementation;
 //using RabbitMQ.Client;
 //using RabbitMqConfig = OrderService.Infrastructure.Messaging.RabbitMqConfiguration.RabbitMqConfiguration;
 
@@ -15,13 +15,13 @@
 //    private readonly ILogger<RabbitMQTopologyInitializer> _logger;
 //    private readonly IRabbitMQConnectionManager _connectionManager;
 //    private readonly RabbitMqConfig _rabbitConfig;
-//    private readonly MessagingV2Options _v2Options;
+//    private readonly RabbitImplementationOptions _v2Options;
 
 //    public RabbitMQTopologyInitializer(
 //        ILogger<RabbitMQTopologyInitializer> logger,
 //        IRabbitMQConnectionManager connectionManager,
 //        IOptions<RabbitMqConfig> rabbitConfig,
-//        IOptions<MessagingV2Options> v2Options)
+//        IOptions<RabbitImplementationOptions> v2Options)
 //    {
 //        _logger = logger;
 //        _connectionManager = connectionManager;
@@ -34,7 +34,7 @@
 //        using var channel = _connectionManager.CreateChannel();
 //        DeclareCdcTopology(channel);
 //        if (!string.IsNullOrEmpty(_v2Options.ExchangeName))
-//            DeclareMessagingV2Topology(channel);
+//            DeclareRabbitImplementationTopology(channel);
 //    }
 
 //    private void DeclareCdcTopology(IModel channel)
@@ -76,7 +76,7 @@
 //            exchange, queue, dlx, dlq);
 //    }
 
-//    private void DeclareMessagingV2Topology(IModel channel)
+//    private void DeclareRabbitImplementationTopology(IModel channel)
 //    {
 
 //        var exchange = _v2Options.ExchangeName;
@@ -103,7 +103,8 @@
 //        channel.QueueDeclare(queue, durable: true, exclusive: false, autoDelete: false, arguments: queueArgs);
 //        channel.QueueBind(queue, exchange, routingKey);
 
-//        _logger.LogInformation("MessagingV2 topology declared: exchange={Exchange}, queue={Queue}, dlx={Dlx}, dlq={Dlq}",
+//        _logger.LogInformation("RabbitImplementation topology declared: exchange={Exchange}, queue={Queue}, dlx={Dlx}, dlq={Dlq}",
 //            exchange, queue, dlx, dlq);
 //    }
 //}
+

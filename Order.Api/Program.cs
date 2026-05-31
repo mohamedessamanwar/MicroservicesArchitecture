@@ -1,5 +1,6 @@
 using Micro.Shared.MetricServices.Extensions;
 using Order.Api.Handlers;
+using Micro.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseHttpsRedirection();
 

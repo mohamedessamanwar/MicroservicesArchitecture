@@ -1,13 +1,8 @@
 using OrderService.Application;
 using OrderService.Infrastructure;
-using OrderService.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Micro.Shared.Caching;
 using Micro.Shared.Http.Extensions;
-
-
 using Micro.Shared.Middleware;
-using Micro.Shared.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,7 +31,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Global exception handler is outermost so it can convert any downstream failure to a safe JSON body.
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 app.UseRouting();
 // Custom Middlewares for Multi-tenancy and DB Routing
 app.UseMiddleware<CountryMiddleware>();
@@ -45,45 +41,5 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
-// Database Migration on startup
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var logger = services.GetRequiredService<ILogger<Program>>();
-    
-    // Define all tenants and their modes to ensure every database is migrated
-    var countries = new[] { "Egypt", "UAE" };
-    var modes = new[] { OperationMode.Write, OperationMode.Read };
-
-    foreach (var country in countries)
-    {
-        foreach (var mode in modes)
-        {
-            try
-            {
-                // We must create a new scope for each migration because the connection string 
-                // is resolved from the RequestContext at the moment the DbContext is instantiated.
-                using (var migrationScope = app.Services.CreateScope())
-                {
-                    var requestContext = migrationScope.ServiceProvider.GetRequiredService<IRequestContext>();
-                    requestContext.Country = country;
-                    requestContext.OperationMode = mode;
-
-                    var context = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
-                    
-                    logger.LogInformation("Applying migrations for {Country} ({Mode})...", country, mode);
-                    await context.Database.MigrateAsync();
-                    logger.LogInformation("Successfully migrated {Country} ({Mode}).", country, mode);
-                }
-            }
-            catch (Exception ex)
-            {
-                // We use Warning because some databases (like UAE) might not be configured/reachable yet in all environments
-                logger.LogWarning(ex, "Migration skipped for {Country} ({Mode}): {Message}", country, mode, ex.Message);
-            }
-        }
-    }
-}
 
 await app.RunAsync();

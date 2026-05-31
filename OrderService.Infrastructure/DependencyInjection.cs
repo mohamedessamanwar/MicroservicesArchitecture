@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OrderService.Domain.Interfaces;
@@ -33,8 +33,8 @@ public static class DependencyInjection
         services.Configure<RabbitMqConfiguration>(
             configuration.GetSection(RabbitMqConfiguration.SectionName));
 
-        services.AddMessagingV2(configuration);
-        services.AddOrderMessagingConsumerJobs();
+        services.AddRabbitImplementation(configuration);
+        services.AddRabbitImplementationConsumerJobs();
 
         return services;
     }

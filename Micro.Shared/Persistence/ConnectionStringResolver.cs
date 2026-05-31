@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace Micro.Shared.Persistence;
 
@@ -35,8 +36,16 @@ public class ConnectionStringResolver : IConnectionStringResolver
             throw new InvalidOperationException($"Connection string for {country} ({mode}) is not configured.");
         }
 
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Pooling = true,
+
+            Timeout = 15,
+            CommandTimeout = 30
+        };
+
         _logger.LogInformation("Resolved connection string for Country: {Country}, Mode: {Mode}", country, mode);
 
-        return connectionString;
+        return builder.ConnectionString;
     }
 }
