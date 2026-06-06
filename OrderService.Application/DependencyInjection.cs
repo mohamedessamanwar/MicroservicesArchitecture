@@ -15,7 +15,7 @@ public static class DependencyInjection
             cfg.RegisterServicesFromAssembly(assembly);
         });
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Behaviors.ValidationBehavior<,>));
-        services.AddAutoMapper(assembly);
+        services.AddAutoMapper(cfg => cfg.AddMaps(assembly));
         services.AddValidatorsFromAssembly(assembly);
 
         return services;
