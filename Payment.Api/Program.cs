@@ -1,6 +1,7 @@
 using FluentValidation.AspNetCore;
 using Micro.Shared.Caching;
 using Micro.Shared.Http.Extensions;
+using Micro.Shared.Idempotency;
 using Micro.Shared.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Payment.Application;

@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -132,30 +132,16 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
             var body = Encoding.UTF8.GetString(ea.Body.ToArray());
             using var document = JsonDocument.Parse(body);
             var root = document.RootElement;
-
             var eventType = ExtractEventType(root);
             var messageId = ExtractMessageId(ea, root);
-
-            _logger.LogInformation(
-                "RabbitMQ delivery received. Country={Country}, Queue={Queue}, DeliveryTag={DeliveryTag}, MessageId={MessageId}, EventType={EventType}, Redelivered={Redelivered}, BodyLength={BodyLength}",
-                _country,
-                GetQueueName(),
-                ea.DeliveryTag,
-                messageId,
-                eventType,
-                ea.Redelivered,
-                body.Length);
-
             using var scope = _scopeFactory.CreateScope();
             var requestContext = scope.ServiceProvider.GetRequiredService<IRequestContext>();
             requestContext.Country = _country;
             requestContext.OperationMode = OperationMode.Write;
-
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var inboxStore = scope.ServiceProvider.GetRequiredService<IInboxStore>();
             var consumerResolver = scope.ServiceProvider.GetRequiredService<IEventConsumerResolver>();
             var consumer = consumerResolver.Resolve(eventType);
-
             await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, CancellationToken.None);
 
             try
@@ -169,19 +155,9 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
                 }, CancellationToken.None);
 
                 await dbContext.SaveChangesAsync(CancellationToken.None);
-
-                _logger.LogInformation(
-                    "Inbox insert succeeded. Country={Country}, MessageId={MessageId}, EventType={EventType}, Consumer={Consumer}",
-                    _country,
-                    messageId,
-                    eventType,
-                    consumer.GetType().Name);
-
                 await consumer.ConsumeAsync(root, CancellationToken.None);
-
                 await dbContext.SaveChangesAsync(CancellationToken.None);
                 await transaction.CommitAsync(CancellationToken.None);
-
                 channel.BasicAck(ea.DeliveryTag, multiple: false);
 
                 _logger.LogInformation(
@@ -208,7 +184,7 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
             {
                 await transaction.RollbackAsync(CancellationToken.None);
 
-                var requeue = !ea.Redelivered;
+                var requeue = false;
                 channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: requeue);
 
                 _logger.LogError(

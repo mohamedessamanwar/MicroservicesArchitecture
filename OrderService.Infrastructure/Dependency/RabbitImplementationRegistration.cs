@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -21,10 +21,8 @@ public static class RabbitImplementationRegistration
 {
     /// <summary>
     /// Registers RabbitMQ provider options, TCP connections, channel pool, outbox/inbox stores, JSON serializer, routing registry,
-    /// application <see cref="IEventPublisher"/>, topology initializer job, and the outbox dispatcher background job.
+    /// application <see cref="IEventPublisher"/>, and the outbox dispatcher background job.
     /// 
-    /// Startup order is enforced: RabbitMqTopologyInitializerJob runs first, initializing all topology from configuration.
-    /// OutboxDispatcherJob and consumer jobs wait for topology initialization before beginning work.
     /// Does not register consumer hosted services - use <see cref="AddRabbitImplementationConsumerJobs"/> for those.
     /// </summary>
     public static IServiceCollection AddRabbitImplementation(this IServiceCollection services, IConfiguration configuration)
@@ -34,7 +32,6 @@ public static class RabbitImplementationRegistration
             .Bind(configuration.GetSection("Messaging"))
             .Validate(o => o.Countries.Count > 0, "At least one country must be configured under Messaging:Countries.")
             .Validate(o => o.Providers.Count > 0, "At least one RabbitMQ provider must be configured under Messaging:Providers.")
-            .Validate(o => o.Topologies.Count > 0, "At least one RabbitMQ topology must be configured under Messaging:Topologies.")
             .ValidateOnStart();
 
         // Singleton: one TCP connection registry + channel pool shared by dispatcher (and optional publishers).
@@ -50,9 +47,6 @@ public static class RabbitImplementationRegistration
         services.AddScoped<IEventConsumerResolver, EventConsumerResolver>();
         services.AddScoped<OrderCreatedEventConsumer>();
 
-        services.AddSingleton<IHostedService, RabbitMqTopologyInitializerJob>();
-
-        // Dispatcher waits for topology initialization before starting.
         // Register one hosted job per country so each dispatcher resolves the proper scoped connection string.
         services.AddSingleton<IHostedService>(sp => new OutboxDispatcherJob(
             sp.GetRequiredService<IServiceScopeFactory>(),
@@ -88,7 +82,6 @@ public static class RabbitImplementationRegistration
     /// <summary>
     /// Registers queue consumer background jobs and their <see cref="IConsumer{T}"/> handlers.
     /// Kept separate so you can enable/disable consumers without touching core messaging registration.
-    /// Each consumer waits for topology initialization before consuming.
     /// </summary>
     public static IServiceCollection AddRabbitImplementationConsumerJobs(this IServiceCollection services)
     {
