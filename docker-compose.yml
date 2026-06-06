@@ -65,6 +65,8 @@ services:
       context: ./compose/pgbouncer
       dockerfile: Dockerfile
     container_name: pgbouncer
+    restart: unless-stopped # Keep PgBouncer running
+    user: postgres # PgBouncer refuses to run as root, so we run as postgres user
     depends_on:
       write-db:
         condition: service_healthy
@@ -72,6 +74,9 @@ services:
         condition: service_healthy
     ports:
       - "6432:6432"
+    volumes:
+      - ./compose/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro # Map config directly to avoid rebuilds
+      - ./compose/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     networks:
       - microservices-network
     healthcheck:
@@ -245,8 +250,8 @@ services:
     environment:
       - ConnectionStrings__Egypt__Primary=Host=pgbouncer;Port=6432;Database=OrderDb;Username=admin;Password=pass; # Egypt write DB through PgBouncer
       - ConnectionStrings__Egypt__Replica=Host=pgbouncer;Port=6432;Database=OrderDbReplica;Username=admin;Password=pass; # Egypt read DB through PgBouncer
-      - ConnectionStrings__UAE__Primary=Host=pgbouncer;Port=6432;Database=OrderDbUae;Username=admin;Password=pass; # UAE write DB through PgBouncer
-      - ConnectionStrings__UAE__Replica=Host=pgbouncer;Port=6432;Database=OrderDbUaeReplica;Username=admin;Password=pass; # UAE read DB through PgBouncer
+      - ConnectionStrings__USA__Primary=Host=pgbouncer;Port=6432;Database=OrderDb-USA;Username=admin;Password=pass; # USA write DB through PgBouncer
+      - ConnectionStrings__USA__Replica=Host=pgbouncer;Port=6432;Database=OrderDb-USAReplica;Username=admin;Password=pass; # USA read DB through PgBouncer
       - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
     depends_on:
       pgbouncer:
@@ -279,7 +284,11 @@ services:
         BUILD_CONFIGURATION: Debug # Debug build for VS
     container_name: payment-service # Friendly container name
     environment:
-      - ConnectionStrings__PaymentDatabase=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Payment DB through PgBouncer
+      - ConnectionStrings__Egypt__Primary=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Egypt write Payment DB
+      - ConnectionStrings__Egypt__Replica=Host=pgbouncer;Port=6432;Database=PaymentDbReplica;Username=admin;Password=pass; # Egypt read Payment DB
+      - ConnectionStrings__USA__Primary=Host=pgbouncer;Port=6432;Database=PaymentDb-USA;Username=admin;Password=pass; # USA write Payment DB
+      - ConnectionStrings__USA__Replica=Host=pgbouncer;Port=6432;Database=PaymentDb-USAReplica;Username=admin;Password=pass; # USA read Payment DB
+      - ConnectionStrings__PaymentDatabase=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Fallback Payment DB
       - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
     depends_on:
       pgbouncer:

@@ -9,8 +9,12 @@ psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datna
 psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb'" | grep -q 1 \
   || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb";'
 
-psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb-uae'" | grep -q 1 \
-  || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb-uae";'
+  psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'OrderDb'" | grep -q 1 \
+  || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "OrderDb-USA";'
+
+psql -h write-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb'" | grep -q 1 \
+  || psql -h write-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb-USA";'
+
 
 echo "Creating databases on read-db if missing..."
 
@@ -20,13 +24,18 @@ psql -h read-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datnam
 psql -h read-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb'" | grep -q 1 \
   || psql -h read-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb";'
 
-psql -h read-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb-uae'" | grep -q 1 \
-  || psql -h read-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb-uae";'
+  psql -h read-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'OrderDb'" | grep -q 1 \
+  || psql -h read-db -U admin -d postgres -c 'CREATE DATABASE "OrderDb-USA";'
+
+psql -h read-db -U admin -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'PaymentDb'" | grep -q 1 \
+  || psql -h read-db -U admin -d postgres -c 'CREATE DATABASE "PaymentDb-USA";'
 
 
 echo "Creating publications on write-db..."
 
 psql -h write-db -U admin -d OrderDb -c "CREATE PUBLICATION order_pub FOR ALL TABLES;" || true
 psql -h write-db -U admin -d PaymentDb -c "CREATE PUBLICATION payment_pub FOR ALL TABLES;" || true
-psql -h write-db -U admin -d \"PaymentDb-uae\" -c "CREATE PUBLICATION payment_uae_pub FOR ALL TABLES;" || true
+psql -h write-db -U admin -d "OrderDb-USA" -c "CREATE PUBLICATION order_pub_usa FOR ALL TABLES;" || true
+psql -h write-db -U admin -d "PaymentDb-USA" -c "CREATE PUBLICATION payment_pub_usa FOR ALL TABLES;" || true
+
 echo "Done."
