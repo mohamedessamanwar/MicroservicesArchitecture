@@ -322,6 +322,29 @@ services:
       - ./compose/db-init/replica-setup.sh:/scripts/replica-setup.sh:ro # Replica setup script
     command: ["sh", "/scripts/replica-setup.sh"]
 
+  # =========================
+  # API Gateway
+  # =========================
+  api-gateway:
+    build:
+      context: . # Solution root
+      dockerfile: ApiGateway/Dockerfile # API Gateway Dockerfile
+      args:
+        BUILD_CONFIGURATION: Debug # Debug build for VS
+    container_name: api-gateway # Friendly container name
+    depends_on:
+      - order-service
+      - payment-service
+    networks:
+      - microservices-network # Shared network for all services
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"] # TCP connect check
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+
 volumes:
   postgres_data: # Write DB volume
   read_db_data: # Replica DB volume
