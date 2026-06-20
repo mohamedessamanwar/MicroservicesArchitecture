@@ -11,7 +11,7 @@ public sealed class EventRoutingRegistry : IEventRoutingRegistry
 
     public EventRoutingRegistry()
     {
-        Register<OrderCreatedEvent>("BillingBroker", "billing.exchange", "order.created");
+        Register<OrderCreatedEvent>("Broker", "order.exchange", "order.created");
     }
 
     private void Register<TEvent>(string providerName, string exchange, string routingKey)

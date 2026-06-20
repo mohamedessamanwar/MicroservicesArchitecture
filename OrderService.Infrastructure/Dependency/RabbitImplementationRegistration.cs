@@ -48,33 +48,25 @@ public static class RabbitImplementationRegistration
         services.AddScoped<OrderCreatedEventConsumer>();
 
         // Register one hosted job per country so each dispatcher resolves the proper scoped connection string.
-        services.AddSingleton<IHostedService>(sp => new OutboxDispatcherJob(
-            sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<IChannelPool>(),
-            sp.GetRequiredService<IRabbitMqNamePrefixer>(),
-            sp.GetRequiredService<ILogger<OutboxDispatcherJob>>(),
-            "Egypt"));
+        var messagingOptions = configuration.GetSection("Messaging").Get<MessagingOptions>();
+        var countries = messagingOptions?.Countries ?? new List<string>();
 
-        services.AddSingleton<IHostedService>(sp => new OutboxDispatcherJob(
-            sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<IChannelPool>(),
-            sp.GetRequiredService<IRabbitMqNamePrefixer>(),
-            sp.GetRequiredService<ILogger<OutboxDispatcherJob>>(),
-            "UAE"));
+        foreach (var country in countries)
+        {
+            services.AddSingleton<IHostedService>(sp => new OutboxDispatcherJob(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IChannelPool>(),
+                sp.GetRequiredService<IRabbitMqNamePrefixer>(),
+                sp.GetRequiredService<ILogger<OutboxDispatcherJob>>(),
+                country));
 
-        services.AddSingleton<IHostedService>(sp => new OrderCreatedConsumerJob(
-            sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<IRabbitMqConnectionRegistry>(),
-            sp.GetRequiredService<IRabbitMqNamePrefixer>(),
-            sp.GetRequiredService<ILogger<OrderCreatedConsumerJob>>(),
-            "Egypt"));
-
-        services.AddSingleton<IHostedService>(sp => new OrderCreatedConsumerJob(
-            sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<IRabbitMqConnectionRegistry>(),
-            sp.GetRequiredService<IRabbitMqNamePrefixer>(),
-            sp.GetRequiredService<ILogger<OrderCreatedConsumerJob>>(),
-            "UAE"));
+            services.AddSingleton<IHostedService>(sp => new OrderCreatedConsumerJob(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IRabbitMqConnectionRegistry>(),
+                sp.GetRequiredService<IRabbitMqNamePrefixer>(),
+                sp.GetRequiredService<ILogger<OrderCreatedConsumerJob>>(),
+                country));
+        }
 
         return services;
     }
