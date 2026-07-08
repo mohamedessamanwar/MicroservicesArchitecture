@@ -21,6 +21,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/write-init.sh:/docker-entrypoint-initdb.d/write-init.sh:ro
     networks:
       - microservices-network
     healthcheck:
@@ -36,11 +37,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: redis-server --appendonly yes
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       - microservices-network
     healthcheck:
@@ -109,30 +111,6 @@ services:
 
 
   # =========================
-  # Database Init (Create databases & Set up Replication)
-  # =========================
-  db-init:
-    image: postgres:16-alpine
-    container_name: db-init
-    depends_on:
-      write-db:
-        condition: service_healthy
-      read-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-    environment:
-      PGHOST: write-db
-      PGPORT: 5432
-      PGUSER: admin
-      PGPASSWORD: pass
-      PGDATABASE: postgres
-    volumes:
-      - ./compose/db-init/init-db.sh:/scripts/init-db.sh:ro
-    command: ["sh", "/scripts/init-db.sh"]
-
-  # =========================
   # PostgreSQL (Read Replica) - Asynchronous Logical Replica
   # =========================
   read-db:
@@ -150,6 +128,7 @@ services:
       - "5433:5432"
     volumes:
       - read_db_data:/var/lib/postgresql/data
+      - ./infra/postgres/read-init.sh:/docker-entrypoint-initdb.d/read-init.sh:ro
     networks:
       - microservices-network
     healthcheck:
@@ -174,8 +153,7 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
-      db-init:
-        condition: service_completed_successfully
+
     networks:
       - microservices-network
     environment:
@@ -202,8 +180,7 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
-      db-init:
-        condition: service_completed_successfully
+
     networks:
       - microservices-network
     environment:
@@ -233,8 +210,7 @@ services:
     environment:
       - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
       - ConnectionStrings__Egypt__Replica=Host=read-db;Port=5432;Database=OrderDb;Username=admin;Password=pass;
-      - ConnectionStrings__UAE__Primary=Host=write-db-uae;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass;
-      - ConnectionStrings__UAE__Replica=Host=read-db-uae;Port=5432;Database=OrderDb-uae;Username=admin;Password=pass;
+
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
       - VSDBG_PMI_ENABLE=1
       - DOTNET_ENVIRONMENT=Development
@@ -245,8 +221,7 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
-      db-init:
-        condition: service_completed_successfully
+
       redis:
         condition: service_healthy
     networks:
@@ -271,8 +246,7 @@ services:
     environment:
       - ConnectionStrings__Egypt__Primary=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
       - ConnectionStrings__Egypt__Replica=Host=write-db;Port=5432;Database=PaymentDb;Username=admin;Password=pass;
-      - ConnectionStrings__UAE__Primary=Host=write-db-uae;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass;
-      - ConnectionStrings__UAE__Replica=Host=write-db-uae;Port=5432;Database=PaymentDb-uae;Username=admin;Password=pass;
+
       - ConnectionStrings__Redis=redis:6379,abortConnect=false
     depends_on:
       write-db:
@@ -281,8 +255,7 @@ services:
         condition: service_healthy
       rabbitmq-init:
         condition: service_completed_successfully
-      db-init:
-        condition: service_completed_successfully
+
       redis:
         condition: service_healthy
     networks:
@@ -295,6 +268,8 @@ services:
     image: postgres:16-alpine
     container_name: replica-setup
     depends_on:
+      write-db:
+        condition: service_healthy
       order-service:
         condition: service_healthy
       read-db:
@@ -305,7 +280,7 @@ services:
       PGPASSWORD: pass
     restart: "no"
     volumes:
-      - ./compose/db-init/replica-setup.sh:/scripts/replica-setup.sh:ro
+      - ./infra/postgres/replica-setup.sh:/scripts/replica-setup.sh:ro
     command: ["sh", "/scripts/replica-setup.sh"]
 
 volumes:
