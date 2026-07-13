@@ -19,7 +19,7 @@ namespace OrderService.Infrastructure.RabbitImplementation.Consumers;
 
 public sealed class OrderCreatedConsumerJob : BackgroundService
 {
-    private const string QueueName = "order.created.q";
+    private const string QueueName = "order.Q";
     private const string ProviderName = "BillingBroker";
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -50,7 +50,7 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
         _logger.LogInformation(
             "OrderCreatedConsumerJob for {Country} is waiting to consume queue {QueueName}.",
             _country,
-            QueueName);
+            GetQueueName());
 
         await base.StartAsync(cancellationToken);
     }

@@ -1,5 +1,6 @@
 using FluentValidation.AspNetCore;
 using Micro.Shared.Caching;
+using Micro.Shared.Health;
 using Micro.Shared.Http.Extensions;
 using Micro.Shared.Idempotency;
 using Micro.Shared.Middleware;
@@ -31,6 +32,7 @@ builder.Services.AddIdempotency();
 // Microservice Clients
 builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddOrderServiceClient(builder.Configuration);
+builder.Services.AddMicroserviceHealthChecks(builder.Configuration);
 
 var app = builder.Build();
 
@@ -42,6 +44,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
+
+app.UseRouting();
+app.MapMicroserviceHealthChecks();
 
 app.UseMiddleware<CountryMiddleware>();
 app.UseMiddleware<OperationModeMiddleware>();

@@ -1,6 +1,7 @@
 using OrderService.Application;
 using OrderService.Infrastructure;
 using Micro.Shared.Caching;
+using Micro.Shared.Health;
 using Micro.Shared.Http.Extensions;
 using Micro.Shared.Middleware;
 
@@ -19,8 +20,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddRedisCaching(builder.Configuration);
 builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddPaymentServiceClient(builder.Configuration);
-
-
+builder.Services.AddMicroserviceHealthChecks(builder.Configuration);
 
 var app = builder.Build();
 
@@ -34,6 +34,8 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseRouting();
+app.MapMicroserviceHealthChecks();
+
 // Custom Middlewares for Multi-tenancy and DB Routing
 app.UseMiddleware<CountryMiddleware>();
 app.UseMiddleware<OperationModeMiddleware>();

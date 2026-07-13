@@ -1,6 +1,8 @@
 **/.classpath
 **/.dockerignore
 **/.env
+**/.env.*
+!**/.env.example
 **/.git
 **/.gitignore
 **/.project
@@ -19,12 +21,8 @@
 **/node_modules
 **/npm-debug.log
 **/obj
-**/secrets.dev.yaml
+**/secrets*
 **/values.dev.yaml
 LICENSE
 README.md
 !**/.gitignore
-!.git/HEAD
-!.git/config
-!.git/packed-refs
-!.git/refs/heads/**

@@ -1,9 +1,9 @@
 services:
   # =========================
-  # PostgreSQL (Write DB) - enables logical replication for Debezium
+  # PostgreSQL (Primary DB)
   # =========================
   write-db:
-    image: postgres:16-alpine # Base Postgres image
+    image: postgres:16-alpine # Primary DB container
     container_name: write-db # Friendly container name
     command:
       - postgres
@@ -13,19 +13,20 @@ services:
       - max_replication_slots=10
       - -c
       - max_wal_senders=10
-    environment:
-      POSTGRES_USER: admin # DB admin user
-      POSTGRES_PASSWORD: pass # DB admin password
-      POSTGRES_DB: write_db # Default DB created on boot
+    env_file:
+      - .env/postgres.env
     ports:
       - "5432:5432" # Expose Postgres to host
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persist database data
-      - ./infra/postgres/write-init.sh:/docker-entrypoint-initdb.d/write-init.sh:ro
+      - ./infra/postgres/write-startup.sh:/usr/local/bin/write-startup.sh:ro
+      - ./OrderService.Api/migration.sql:/scripts/order-migration.sql:ro
+      - ./Payment.Api/migration.sql:/scripts/payment-migration.sql:ro
+    entrypoint: [ "sh", "/usr/local/bin/write-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d write_db"] # Wait until Postgres accepts connections
+      test: [ "CMD-SHELL", "pg_isready -U admin -d write_db" ] # Wait until Postgres accepts connections
       interval: 10s
       timeout: 5s
       retries: 10
@@ -41,19 +42,20 @@ services:
       - postgres
       - -c
       - wal_level=logical
-    environment:
-      POSTGRES_USER: admin # DB admin user
-      POSTGRES_PASSWORD: pass # DB admin password
-      POSTGRES_DB: replica_db # Replica DB name
+    env_file:
+      - .env/postgres.env
     ports:
       - "5433:5432" # Expose replica to host
     volumes:
       - read_db_data:/var/lib/postgresql/data # Persist replica data
-      - ./infra/postgres/read-init.sh:/docker-entrypoint-initdb.d/read-init.sh:ro
+      - ./infra/postgres/read-startup.sh:/usr/local/bin/read-startup.sh:ro
+      - ./OrderService.Api/migration.sql:/scripts/order-migration.sql:ro
+      - ./Payment.Api/migration.sql:/scripts/payment-migration.sql:ro
+    entrypoint: [ "sh", "/usr/local/bin/read-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d replica_db"] # Wait until Postgres accepts connections
+      test: [ "CMD-SHELL", "pg_isready -U admin -d write_db" ] # Wait until Postgres accepts connections
       interval: 10s
       timeout: 5s
       retries: 10
@@ -82,7 +84,7 @@ services:
     networks:
       - microservices-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U admin -d OrderDb"]
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U admin -d OrderDb" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -103,7 +105,7 @@ services:
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"] # Validate Redis health
+      test: [ "CMD", "redis-cli", "ping" ] # Validate Redis health
       interval: 10s
       timeout: 5s
       retries: 10
@@ -115,9 +117,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine # RabbitMQ with management UI
     container_name: rabbitmq # Friendly container name
-    environment:
-      RABBITMQ_DEFAULT_USER: admin # Default admin user
-      RABBITMQ_DEFAULT_PASS: admin123 # Default admin password
+    env_file:
+      - .env/rabbitmq.env
     ports:
       - "5672:5672" # AMQP protocol port
       - "15672:15672" # Management UI port
@@ -126,7 +127,7 @@ services:
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"] # Wait for RabbitMQ to be ready
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ] # Wait for RabbitMQ to be ready
       interval: 10s
       timeout: 5s
       retries: 15
@@ -138,27 +139,17 @@ services:
   rabbitmq-init:
     image: rabbitmq:3-management-alpine # Uses rabbitmqadmin CLI
     container_name: rabbitmq-init # Friendly container name
+    env_file:
+      - .env/rabbitmq.env
     depends_on:
       rabbitmq:
         condition: service_healthy # Run after RabbitMQ is ready
     networks:
       - microservices-network # Shared network for all services
     restart: "no" # Run once and exit
-    command: |
-      sh -c "
-      echo 'Waiting for rabbitmq management API on port 15672...' &&
-      until wget -qO- http://admin:admin123@rabbitmq:15672/api/overview > /dev/null 2>&1; do
-        sleep 2
-      done
-      echo 'Management API is up. Declaring topology...' &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare exchange name=cdc.exchange type=topic durable=true &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=order.write.cdc.q durable=true &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare queue name=payment.write.cdc.q durable=true &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='order-server.public.#' &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=payment.write.cdc.q routing_key='payment-server.public.#' &&
-      rabbitmqadmin -H rabbitmq -u admin -p admin123 declare binding source=cdc.exchange destination=order.write.cdc.q routing_key='#' &&
-      echo 'RabbitMQ exchange/queues/wildcard-bindings created.'
-      "
+    volumes:
+      - ./infra/rabbitmq/init-topology.sh:/scripts/init-topology.sh:ro
+    command: [ "sh", "/scripts/init-topology.sh" ]
 
   # =========================
   # Debezium - Order DB
@@ -173,7 +164,6 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
-
     networks:
       - microservices-network # Shared network for all services
     environment:
@@ -200,7 +190,6 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
-
     networks:
       - microservices-network # Shared network for all services
     environment:
@@ -222,14 +211,10 @@ services:
       context: . # Solution root
       dockerfile: OrderService.Api/Dockerfile # Order API Dockerfile
       args:
-        BUILD_CONFIGURATION: Debug # Debug build for VS
+        BUILD_CONFIGURATION: Release
     container_name: order-service # Friendly container name
-    environment:
-      - ConnectionStrings__Egypt__Primary=Host=pgbouncer;Port=6432;Database=OrderDb;Username=admin;Password=pass; # Egypt write DB through PgBouncer
-      - ConnectionStrings__Egypt__Replica=Host=pgbouncer;Port=6432;Database=OrderDbReplica;Username=admin;Password=pass; # Egypt read DB through PgBouncer
-      - ConnectionStrings__USA__Primary=Host=pgbouncer;Port=6432;Database=OrderDb-USA;Username=admin;Password=pass; # USA write DB through PgBouncer
-      - ConnectionStrings__USA__Replica=Host=pgbouncer;Port=6432;Database=OrderDb-USAReplica;Username=admin;Password=pass; # USA read DB through PgBouncer
-      - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
+    env_file:
+      - .env/order-service.env
     depends_on:
       pgbouncer:
         condition: service_healthy # Wait for PgBouncer
@@ -237,13 +222,12 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
-
       redis:
         condition: service_healthy # Wait for Redis
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"] # TCP connect check (bash built-in)
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -257,15 +241,10 @@ services:
       context: . # Solution root
       dockerfile: Payment.Api/Dockerfile # Payment API Dockerfile
       args:
-        BUILD_CONFIGURATION: Debug # Debug build for VS
+        BUILD_CONFIGURATION: Release
     container_name: payment-service # Friendly container name
-    environment:
-      - ConnectionStrings__Egypt__Primary=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Egypt write Payment DB
-      - ConnectionStrings__Egypt__Replica=Host=pgbouncer;Port=6432;Database=PaymentDbReplica;Username=admin;Password=pass; # Egypt read Payment DB
-      - ConnectionStrings__USA__Primary=Host=pgbouncer;Port=6432;Database=PaymentDb-USA;Username=admin;Password=pass; # USA write Payment DB
-      - ConnectionStrings__USA__Replica=Host=pgbouncer;Port=6432;Database=PaymentDb-USAReplica;Username=admin;Password=pass; # USA read Payment DB
-      - ConnectionStrings__PaymentDatabase=Host=pgbouncer;Port=6432;Database=PaymentDb;Username=admin;Password=pass; # Fallback Payment DB
-      - ConnectionStrings__Redis=redis:6379,abortConnect=false # Redis connection
+    env_file:
+      - .env/payment-service.env
     depends_on:
       pgbouncer:
         condition: service_healthy # Wait for PgBouncer
@@ -273,11 +252,16 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
-
       redis:
         condition: service_healthy # Wait for Redis
     networks:
       - microservices-network # Shared network for all services
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # =========================
   # Replica Setup (Subscription)
@@ -285,6 +269,8 @@ services:
   replica-setup:
     image: postgres:16-alpine # Uses psql client
     container_name: replica-setup # Friendly container name
+    env_file:
+      - .env/postgres.env
     depends_on:
       write-db:
         condition: service_healthy
@@ -292,12 +278,10 @@ services:
         condition: service_healthy # Wait for replica DB
     networks:
       - microservices-network # Shared network for all services
-    environment:
-      PGPASSWORD: pass # DB password
     restart: "no" # Run once and exit
     volumes:
       - ./infra/postgres/replica-setup.sh:/scripts/replica-setup.sh:ro # Replica setup script
-    command: ["sh", "/scripts/replica-setup.sh"]
+    command: [ "sh", "/scripts/replica-setup.sh" ]
 
   # =========================
   # API Gateway
@@ -307,20 +291,21 @@ services:
       context: . # Solution root
       dockerfile: ApiGateway/Dockerfile # API Gateway Dockerfile
       args:
-        BUILD_CONFIGURATION: Debug # Debug build for VS
+        BUILD_CONFIGURATION: Release
     container_name: api-gateway # Friendly container name
     depends_on:
-      - order-service
-      - payment-service
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"] # TCP connect check
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-
 
 volumes:
   postgres_data: # Write DB volume
@@ -328,7 +313,8 @@ volumes:
   redis_data: # Redis volume
   rabbitmq_data: # RabbitMQ volume
   debezium_order_data: # Debezium order volume
-  debezium_payment_data: # Debezium payment volume
+  debezium_payment_data:
+    # Debezium payment volume
 
 networks:
   microservices-network:

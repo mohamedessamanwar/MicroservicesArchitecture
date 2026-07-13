@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -86,6 +86,7 @@ public sealed class OutboxDispatcherJob : BackgroundService
                         try
                         {
                             var exchangeName = _namePrefixer.Prefix(_country, message.ExchangeName);
+                            var routingKey = _namePrefixer.Prefix(_country, message.RoutingKey);
 
                             // Publish message; assume exchange is pre-provisioned.
                             var body = Encoding.UTF8.GetBytes(message.Payload);
@@ -95,7 +96,7 @@ public sealed class OutboxDispatcherJob : BackgroundService
                             
                             channel.BasicPublish(
                                 exchangeName,
-                                message.RoutingKey,
+                                routingKey,
                                 mandatory: false,
                                 basicProperties: props,
                                 body: body);
@@ -111,7 +112,7 @@ public sealed class OutboxDispatcherJob : BackgroundService
                                 message.MessageId,
                                 providerGroup.Key,
                                 exchangeName,
-                                message.RoutingKey,
+                                routingKey,
                                 message.RetryCount);
                         }
                         catch (Exception ex)
