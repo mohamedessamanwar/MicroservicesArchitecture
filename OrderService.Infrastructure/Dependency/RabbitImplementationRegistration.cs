@@ -2,10 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OrderService.Application.Interfaces;
 using OrderService.Infrastructure.RabbitImplementation.Connections;
 using OrderService.Infrastructure.RabbitImplementation.Consumers;
 using OrderService.Infrastructure.RabbitImplementation.Topology;
+using OrderService.Infrastructure.Messaging.RabbitMqConfiguration;
 
 using OrderService.Infrastructure.RabbitImplementation.Inbox;
 using OrderService.Infrastructure.RabbitImplementation.Outbox;
@@ -65,6 +67,7 @@ public static class RabbitImplementationRegistration
                 sp.GetRequiredService<IRabbitMqConnectionRegistry>(),
                 sp.GetRequiredService<IRabbitMqNamePrefixer>(),
                 sp.GetRequiredService<ILogger<OrderCreatedConsumerJob>>(),
+                sp.GetRequiredService<IOptions<RabbitMqConfiguration>>(),
                 country));
         }
 

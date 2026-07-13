@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Micro.Shared.Persistence;
 using Npgsql;
 using OrderService.Domain.Entities;
@@ -12,6 +13,7 @@ using OrderService.Infrastructure.Data;
 using OrderService.Infrastructure.RabbitImplementation.Connections;
 using OrderService.Infrastructure.RabbitImplementation.Inbox;
 using OrderService.Infrastructure.RabbitImplementation.Topology;
+using OrderService.Infrastructure.Messaging.RabbitMqConfiguration;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -20,12 +22,13 @@ namespace OrderService.Infrastructure.RabbitImplementation.Consumers;
 public sealed class OrderCreatedConsumerJob : BackgroundService
 {
     private const string QueueName = "order.Q";
-    private const string ProviderName = "BillingBroker";
+    private const string ProviderName = "Broker";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRabbitMqConnectionRegistry _connectionRegistry;
     private readonly IRabbitMqNamePrefixer _namePrefixer;
     private readonly ILogger<OrderCreatedConsumerJob> _logger;
+    private readonly RabbitMqConfiguration _rabbitConfig;
     private readonly string _country;
     private readonly SemaphoreSlim _channelGate = new(1, 1);
 
@@ -36,12 +39,14 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
         IRabbitMqConnectionRegistry connectionRegistry,
         IRabbitMqNamePrefixer namePrefixer,
         ILogger<OrderCreatedConsumerJob> logger,
+        IOptions<RabbitMqConfiguration> rabbitConfig,
         string country)
     {
         _scopeFactory = scopeFactory;
         _connectionRegistry = connectionRegistry;
         _namePrefixer = namePrefixer;
         _logger = logger;
+        _rabbitConfig = rabbitConfig.Value;
         _country = country;
     }
 
@@ -134,67 +139,108 @@ public sealed class OrderCreatedConsumerJob : BackgroundService
             var root = document.RootElement;
             var eventType = ExtractEventType(root);
             var messageId = ExtractMessageId(ea, root);
-            using var scope = _scopeFactory.CreateScope();
-            var requestContext = scope.ServiceProvider.GetRequiredService<IRequestContext>();
-            requestContext.Country = _country;
-            requestContext.OperationMode = OperationMode.Write;
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var inboxStore = scope.ServiceProvider.GetRequiredService<IInboxStore>();
-            var consumerResolver = scope.ServiceProvider.GetRequiredService<IEventConsumerResolver>();
-            var consumer = consumerResolver.Resolve(eventType);
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, CancellationToken.None);
+            var correlationId = ea.BasicProperties?.CorrelationId ?? string.Empty;
+            var queueName = GetQueueName();
 
-            try
+            int maxRetry = _rabbitConfig.RetryCount;
+            int delaySeconds = _rabbitConfig.RetryDelaySeconds;
+            int currentRetry = 0;
+            bool success = false;
+            Exception? lastException = null;
+
+            while (currentRetry <= maxRetry)
             {
-                await inboxStore.AddAsync(new InboxMessage
+                using var scope = _scopeFactory.CreateScope();
+                var requestContext = scope.ServiceProvider.GetRequiredService<IRequestContext>();
+                requestContext.Country = _country;
+                requestContext.OperationMode = OperationMode.Write;
+
+                var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var inboxStore = scope.ServiceProvider.GetRequiredService<IInboxStore>();
+                var consumerResolver = scope.ServiceProvider.GetRequiredService<IEventConsumerResolver>();
+                var consumer = consumerResolver.Resolve(eventType);
+
+                await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, CancellationToken.None);
+
+                try
                 {
-                    Id = Guid.NewGuid(),
-                    MessageId = messageId,
-                    EventType = eventType,
-                    ProcessedOnUtc = DateTime.UtcNow
-                }, CancellationToken.None);
+                    await inboxStore.AddAsync(new InboxMessage
+                    {
+                        Id = Guid.NewGuid(),
+                        MessageId = messageId,
+                        EventType = eventType,
+                        ProcessedOnUtc = DateTime.UtcNow
+                    }, CancellationToken.None);
 
-                await dbContext.SaveChangesAsync(CancellationToken.None);
-                await consumer.ConsumeAsync(root, CancellationToken.None);
-                await dbContext.SaveChangesAsync(CancellationToken.None);
-                await transaction.CommitAsync(CancellationToken.None);
-                channel.BasicAck(ea.DeliveryTag, multiple: false);
+                    await dbContext.SaveChangesAsync(CancellationToken.None);
+                    await consumer.ConsumeAsync(root, CancellationToken.None);
+                    await dbContext.SaveChangesAsync(CancellationToken.None);
+                    await transaction.CommitAsync(CancellationToken.None);
 
-                _logger.LogInformation(
-                    "RabbitMQ message processed and acked. Country={Country}, MessageId={MessageId}, EventType={EventType}, Consumer={Consumer}",
-                    _country,
-                    messageId,
-                    eventType,
-                    consumer.GetType().Name);
+                    channel.BasicAck(ea.DeliveryTag, multiple: false);
+                    success = true;
+
+                    _logger.LogInformation(
+                        "RabbitMQ message processed and acked. Country={Country}, MessageId={MessageId}, EventType={EventType}, Consumer={Consumer}, Attempt={Attempt}, CorrelationId={CorrelationId}",
+                        _country,
+                        messageId,
+                        eventType,
+                        consumer.GetType().Name,
+                        currentRetry,
+                        correlationId);
+                    break;
+                }
+                catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    channel.BasicAck(ea.DeliveryTag, multiple: false);
+                    success = true;
+
+                    _logger.LogInformation(
+                        ex,
+                        "Duplicate inbox message skipped. Country={Country}, MessageId={MessageId}, EventType={EventType}, DeliveryTag={DeliveryTag}, CorrelationId={CorrelationId}",
+                        _country,
+                        messageId,
+                        eventType,
+                        ea.DeliveryTag,
+                        correlationId);
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    currentRetry++;
+                    lastException = ex;
+
+                    _logger.LogWarning(
+                        ex,
+                        "Message processing attempt {Attempt} of {MaxRetry} failed. Country={Country}, MessageId={MessageId}, Queue={Queue}, CorrelationId={CorrelationId}",
+                        currentRetry,
+                        maxRetry,
+                        _country,
+                        messageId,
+                        queueName,
+                        correlationId);
+
+                    if (currentRetry <= maxRetry)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    }
+                }
             }
-            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
-            {
-                await transaction.RollbackAsync(CancellationToken.None);
-                channel.BasicAck(ea.DeliveryTag, multiple: false);
 
-                _logger.LogInformation(
-                    ex,
-                    "Duplicate inbox message skipped. Country={Country}, MessageId={MessageId}, EventType={EventType}, DeliveryTag={DeliveryTag}",
-                    _country,
-                    messageId,
-                    eventType,
-                    ea.DeliveryTag);
-            }
-            catch (Exception ex)
+            if (!success)
             {
-                await transaction.RollbackAsync(CancellationToken.None);
-
-                var requeue = false;
-                channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: requeue);
+                channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: false);
 
                 _logger.LogError(
-                    ex,
-                    "Message processing failed. Country={Country}, MessageId={MessageId}, EventType={EventType}, Requeue={Requeue}, DeliveryTag={DeliveryTag}",
+                    lastException,
+                    "Message processing permanently failed after {MaxRetry} attempts. Sent to DLQ. Country={Country}, MessageId={MessageId}, Queue={Queue}, CorrelationId={CorrelationId}",
+                    maxRetry,
                     _country,
                     messageId,
-                    eventType,
-                    requeue,
-                    ea.DeliveryTag);
+                    queueName,
+                    correlationId);
             }
         }
         finally
