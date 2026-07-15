@@ -16,7 +16,7 @@ create_subscription() {
   psql -h write-db -U admin -d "${dbname}" -v ON_ERROR_STOP=1 -Atqc "SELECT pg_drop_replication_slot('${subname}') WHERE EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = '${subname}');" || true
 
   echo "Creating subscription ${subname} on ${dbname}..."
-  psql -h read-db -U admin -d "${dbname}" -v ON_ERROR_STOP=1 -c "CREATE SUBSCRIPTION \"${subname}\" CONNECTION 'host=write-db port=5432 user=admin password=pass dbname=\"${dbname}\"' PUBLICATION ${pubname};"
+  psql -h read-db -U admin -d "${dbname}" -v ON_ERROR_STOP=1 -c "CREATE SUBSCRIPTION \"${subname}\" CONNECTION 'host=write-db port=5432 user=admin password=pass dbname=${dbname}' PUBLICATION ${pubname};"
 }
 
 create_subscription "order_sub" "OrderDb" "order_pub"

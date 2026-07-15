@@ -32,7 +32,7 @@ public class GatewayLoggingMiddleware
             var statusCode = context.Response.StatusCode;
 
             // Extract YARP proxy features if available
-            var proxyFeature = context.GetReverseProxyFeature();
+            var proxyFeature = context.Features.Get<IReverseProxyFeature>();
             var routeId = proxyFeature?.Route?.Config?.RouteId ?? "Unknown";
             var clusterId = proxyFeature?.Cluster?.Config?.ClusterId ?? "Unknown";
             var destinationAddress = proxyFeature?.ProxiedDestination?.Model?.Config?.Address ?? "Unknown";
@@ -54,7 +54,7 @@ public class GatewayLoggingMiddleware
         catch (Exception ex)
         {
             sw.Stop();
-            var proxyFeature = context.GetReverseProxyFeature();
+            var proxyFeature = context.Features.Get<IReverseProxyFeature>();
             var routeId = proxyFeature?.Route?.Config?.RouteId ?? "Unknown";
             var clusterId = proxyFeature?.Cluster?.Config?.ClusterId ?? "Unknown";
             

@@ -20,8 +20,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persist database data
       - ./infra/postgres/write-startup.sh:/usr/local/bin/write-startup.sh:ro
-      - ./OrderService.Api/migration.sql:/scripts/order-migration.sql:ro
-      - ./Payment.Api/migration.sql:/scripts/payment-migration.sql:ro
     entrypoint: [ "sh", "/usr/local/bin/write-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
@@ -49,8 +47,6 @@ services:
     volumes:
       - read_db_data:/var/lib/postgresql/data # Persist replica data
       - ./infra/postgres/read-startup.sh:/usr/local/bin/read-startup.sh:ro
-      - ./OrderService.Api/migration.sql:/scripts/order-migration.sql:ro
-      - ./Payment.Api/migration.sql:/scripts/payment-migration.sql:ro
     entrypoint: [ "sh", "/usr/local/bin/read-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
@@ -60,6 +56,154 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # =========================
+  # Order Service Migrations (Write DB - Egypt & USA)
+  # =========================
+  order-migration-egypt:
+    build:
+      context: .
+      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
+    container_name: order-migration-egypt
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=write-db;Port=5432;Database=OrderDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      write-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  order-migration-usa:
+    build:
+      context: .
+      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
+    container_name: order-migration-usa
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=write-db;Port=5432;Database=OrderDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      write-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  # =========================
+  # Order Service Migrations (Read Replica DB - Egypt & USA schema init for logical replication)
+  # =========================
+  order-migration-read-egypt:
+    build:
+      context: .
+      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
+    container_name: order-migration-read-egypt
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=read-db;Port=5432;Database=OrderDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  order-migration-read-usa:
+    build:
+      context: .
+      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
+    container_name: order-migration-read-usa
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=read-db;Port=5432;Database=OrderDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  # =========================
+  # Payment Service Migrations (Write DB - Egypt & USA)
+  # =========================
+  payment-migration-egypt:
+    build:
+      context: .
+      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
+    container_name: payment-migration-egypt
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=write-db;Port=5432;Database=PaymentDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      write-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  payment-migration-usa:
+    build:
+      context: .
+      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
+    container_name: payment-migration-usa
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=write-db;Port=5432;Database=PaymentDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      write-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  # =========================
+  # Payment Service Migrations (Read Replica DB - Egypt & USA schema init for logical replication)
+  # =========================
+  payment-migration-read-egypt:
+    build:
+      context: .
+      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
+    container_name: payment-migration-read-egypt
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=read-db;Port=5432;Database=PaymentDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
+
+  payment-migration-read-usa:
+    build:
+      context: .
+      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
+    container_name: payment-migration-read-usa
+    env_file:
+      - .env/postgres.env
+    environment:
+      EF_CONNECTION_STRING: >
+        Host=read-db;Port=5432;Database=PaymentDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
+    depends_on:
+      read-db:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: "no"
 
   # =========================
   # PgBouncer
@@ -164,6 +308,10 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
+      order-migration-egypt:
+        condition: service_completed_successfully # Ensure schema migration completed
+      order-migration-usa:
+        condition: service_completed_successfully # Ensure schema migration completed
     networks:
       - microservices-network # Shared network for all services
     environment:
@@ -190,6 +338,10 @@ services:
         condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
         condition: service_completed_successfully # Wait for topology
+      payment-migration-egypt:
+        condition: service_completed_successfully # Ensure schema migration completed
+      payment-migration-usa:
+        condition: service_completed_successfully # Ensure schema migration completed
     networks:
       - microservices-network # Shared network for all services
     environment:
@@ -224,6 +376,14 @@ services:
         condition: service_completed_successfully # Wait for topology
       redis:
         condition: service_healthy # Wait for Redis
+      order-migration-egypt:
+        condition: service_completed_successfully # Ensure schema migration completed
+      order-migration-usa:
+        condition: service_completed_successfully # Ensure schema migration completed
+      order-migration-read-egypt:
+        condition: service_completed_successfully # Ensure replica schema initialized
+      order-migration-read-usa:
+        condition: service_completed_successfully # Ensure replica schema initialized
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
@@ -254,6 +414,14 @@ services:
         condition: service_completed_successfully # Wait for topology
       redis:
         condition: service_healthy # Wait for Redis
+      payment-migration-egypt:
+        condition: service_completed_successfully # Ensure schema migration completed
+      payment-migration-usa:
+        condition: service_completed_successfully # Ensure schema migration completed
+      payment-migration-read-egypt:
+        condition: service_completed_successfully # Ensure replica schema initialized
+      payment-migration-read-usa:
+        condition: service_completed_successfully # Ensure replica schema initialized
     networks:
       - microservices-network # Shared network for all services
     healthcheck:
@@ -276,6 +444,22 @@ services:
         condition: service_healthy
       read-db:
         condition: service_healthy # Wait for replica DB
+      order-migration-egypt:
+        condition: service_completed_successfully
+      order-migration-usa:
+        condition: service_completed_successfully
+      order-migration-read-egypt:
+        condition: service_completed_successfully
+      order-migration-read-usa:
+        condition: service_completed_successfully
+      payment-migration-egypt:
+        condition: service_completed_successfully
+      payment-migration-usa:
+        condition: service_completed_successfully
+      payment-migration-read-egypt:
+        condition: service_completed_successfully
+      payment-migration-read-usa:
+        condition: service_completed_successfully
     networks:
       - microservices-network # Shared network for all services
     restart: "no" # Run once and exit
