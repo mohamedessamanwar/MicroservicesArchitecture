@@ -10,6 +10,7 @@
 **/.toolstarget
 **/.vs
 **/.vscode
+**/.idea
 **/*.*proj.user
 **/*.dbmdl
 **/*.jfm
@@ -23,6 +24,11 @@
 **/obj
 **/secrets*
 **/values.dev.yaml
+**/*.log
+**/*.sqlite
+**/temp
+**/tmp
+**/docs
 LICENSE
 README.md
 !**/.gitignore

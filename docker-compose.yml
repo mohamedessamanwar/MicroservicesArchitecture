@@ -15,16 +15,25 @@ services:
       - max_wal_senders=10
     env_file:
       - .env/postgres.env
-    ports:
-      - "5432:5432" # Expose Postgres to host
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persist database data
       - ./infra/postgres/write-startup.sh:/usr/local/bin/write-startup.sh:ro
     entrypoint: [ "sh", "/usr/local/bin/write-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U admin -d write_db" ] # Wait until Postgres accepts connections
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d write_db" ] # Wait until Postgres accepts connections
       interval: 10s
       timeout: 5s
       retries: 10
@@ -38,172 +47,31 @@ services:
     container_name: read-db # Friendly container name
     command:
       - postgres
-      - -c
-      - wal_level=logical
     env_file:
       - .env/postgres.env
-    ports:
-      - "5433:5432" # Expose replica to host
     volumes:
       - read_db_data:/var/lib/postgresql/data # Persist replica data
       - ./infra/postgres/read-startup.sh:/usr/local/bin/read-startup.sh:ro
     entrypoint: [ "sh", "/usr/local/bin/read-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U admin -d write_db" ] # Wait until Postgres accepts connections
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d write_db && psql -U ${POSTGRES_USER:-admin} -d postgres -tAc 'select pg_is_in_recovery()' | grep -q t" ]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
-
-  # =========================
-  # Order Service Migrations (Write DB - Egypt & USA)
-  # =========================
-  order-migration-egypt:
-    build:
-      context: .
-      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
-    container_name: order-migration-egypt
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=write-db;Port=5432;Database=OrderDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      write-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  order-migration-usa:
-    build:
-      context: .
-      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
-    container_name: order-migration-usa
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=write-db;Port=5432;Database=OrderDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      write-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  # =========================
-  # Order Service Migrations (Read Replica DB - Egypt & USA schema init for logical replication)
-  # =========================
-  order-migration-read-egypt:
-    build:
-      context: .
-      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
-    container_name: order-migration-read-egypt
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=read-db;Port=5432;Database=OrderDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      read-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  order-migration-read-usa:
-    build:
-      context: .
-      dockerfile: docker/migrations/OrderService.Migrator.Dockerfile
-    container_name: order-migration-read-usa
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=read-db;Port=5432;Database=OrderDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      read-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  # =========================
-  # Payment Service Migrations (Write DB - Egypt & USA)
-  # =========================
-  payment-migration-egypt:
-    build:
-      context: .
-      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
-    container_name: payment-migration-egypt
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=write-db;Port=5432;Database=PaymentDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      write-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  payment-migration-usa:
-    build:
-      context: .
-      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
-    container_name: payment-migration-usa
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=write-db;Port=5432;Database=PaymentDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      write-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  # =========================
-  # Payment Service Migrations (Read Replica DB - Egypt & USA schema init for logical replication)
-  # =========================
-  payment-migration-read-egypt:
-    build:
-      context: .
-      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
-    container_name: payment-migration-read-egypt
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=read-db;Port=5432;Database=PaymentDb;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      read-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
-
-  payment-migration-read-usa:
-    build:
-      context: .
-      dockerfile: docker/migrations/PaymentService.Migrator.Dockerfile
-    container_name: payment-migration-read-usa
-    env_file:
-      - .env/postgres.env
-    environment:
-      EF_CONNECTION_STRING: >
-        Host=read-db;Port=5432;Database=PaymentDb-USA;Username=${POSTGRES_USER:-admin};Password=${POSTGRES_PASSWORD:-pass};
-    depends_on:
-      read-db:
-        condition: service_healthy
-    networks:
-      - microservices-network
-    restart: "no"
 
   # =========================
   # PgBouncer
@@ -220,13 +88,21 @@ services:
         condition: service_healthy
       read-db:
         condition: service_healthy
-    ports:
-      - "6432:6432"
     volumes:
       - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro # Map config directly to avoid rebuilds
       - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
     networks:
       - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U admin -d OrderDb" ]
       interval: 10s
@@ -241,13 +117,22 @@ services:
     image: redis:7-alpine # Redis base image
     container_name: redis # Friendly container name
     command: redis-server /usr/local/etc/redis/redis.conf
-    ports:
-      - "6379:6379" # Expose Redis to host
     volumes:
       - redis_data:/data # Persist Redis data
       - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ] # Validate Redis health
       interval: 10s
@@ -263,13 +148,21 @@ services:
     container_name: rabbitmq # Friendly container name
     env_file:
       - .env/rabbitmq.env
-    ports:
-      - "5672:5672" # AMQP protocol port
-      - "15672:15672" # Management UI port
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq # Persist RabbitMQ data
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ] # Wait for RabbitMQ to be ready
       interval: 10s
@@ -294,66 +187,11 @@ services:
     volumes:
       - ./infra/rabbitmq/init-topology.sh:/scripts/init-topology.sh:ro
     command: [ "sh", "/scripts/init-topology.sh" ]
-
-  # =========================
-  # Debezium - Order DB
-  # =========================
-  debezium-order:
-    image: debezium/server:2.6 # Debezium server image
-    container_name: debezium-order # Friendly container name
-    depends_on:
-      write-db:
-        condition: service_healthy # Wait for write DB
-      rabbitmq:
-        condition: service_healthy # Wait for RabbitMQ
-      rabbitmq-init:
-        condition: service_completed_successfully # Wait for topology
-      order-migration-egypt:
-        condition: service_completed_successfully # Ensure schema migration completed
-      order-migration-usa:
-        condition: service_completed_successfully # Ensure schema migration completed
-    networks:
-      - microservices-network # Shared network for all services
-    environment:
-      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
-      - DEBEZIUM_SOURCE_SLOT_NAME=order_slot
-      - DEBEZIUM_SOURCE_PUBLICATION_NAME=order_pub
-      - DEBEZIUM_SOURCE_DATABASE_DBNAME=OrderDb
-      - DEBEZIUM_SOURCE_TOPIC_PREFIX=order-server
-    restart: unless-stopped # Keep Debezium running
-    volumes:
-      - ./debezium/orderdb-application.properties:/debezium/conf/application.properties:ro # Debezium config
-      - debezium_order_data:/debezium/data # Debezium data
-
-  # =========================
-  # Debezium - Payment DB
-  # =========================
-  debezium-payment:
-    image: debezium/server:2.6 # Debezium server image
-    container_name: debezium-payment # Friendly container name
-    depends_on:
-      write-db:
-        condition: service_healthy # Wait for write DB
-      rabbitmq:
-        condition: service_healthy # Wait for RabbitMQ
-      rabbitmq-init:
-        condition: service_completed_successfully # Wait for topology
-      payment-migration-egypt:
-        condition: service_completed_successfully # Ensure schema migration completed
-      payment-migration-usa:
-        condition: service_completed_successfully # Ensure schema migration completed
-    networks:
-      - microservices-network # Shared network for all services
-    environment:
-      - DEBEZIUM_SOURCE_PLUGIN_NAME=pgoutput
-      - DEBEZIUM_SOURCE_SLOT_NAME=payment_slot
-      - DEBEZIUM_SOURCE_PUBLICATION_NAME=payment_pub
-      - DEBEZIUM_SOURCE_DATABASE_DBNAME=PaymentDb
-      - DEBEZIUM_SOURCE_TOPIC_PREFIX=payment-server
-    restart: unless-stopped # Keep Debezium running
-    volumes:
-      - ./debezium/paymentdb-application.properties:/debezium/conf/application.properties:ro # Debezium config
-      - debezium_payment_data:/debezium/data # Debezium data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # =========================
   # Order Service API
@@ -376,16 +214,19 @@ services:
         condition: service_completed_successfully # Wait for topology
       redis:
         condition: service_healthy # Wait for Redis
-      order-migration-egypt:
-        condition: service_completed_successfully # Ensure schema migration completed
-      order-migration-usa:
-        condition: service_completed_successfully # Ensure schema migration completed
-      order-migration-read-egypt:
-        condition: service_completed_successfully # Ensure replica schema initialized
-      order-migration-read-usa:
-        condition: service_completed_successfully # Ensure replica schema initialized
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1" ]
       interval: 10s
@@ -414,58 +255,25 @@ services:
         condition: service_completed_successfully # Wait for topology
       redis:
         condition: service_healthy # Wait for Redis
-      payment-migration-egypt:
-        condition: service_completed_successfully # Ensure schema migration completed
-      payment-migration-usa:
-        condition: service_completed_successfully # Ensure schema migration completed
-      payment-migration-read-egypt:
-        condition: service_completed_successfully # Ensure replica schema initialized
-      payment-migration-read-usa:
-        condition: service_completed_successfully # Ensure replica schema initialized
     networks:
       - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-
-  # =========================
-  # Replica Setup (Subscription)
-  # =========================
-  replica-setup:
-    image: postgres:16-alpine # Uses psql client
-    container_name: replica-setup # Friendly container name
-    env_file:
-      - .env/postgres.env
-    depends_on:
-      write-db:
-        condition: service_healthy
-      read-db:
-        condition: service_healthy # Wait for replica DB
-      order-migration-egypt:
-        condition: service_completed_successfully
-      order-migration-usa:
-        condition: service_completed_successfully
-      order-migration-read-egypt:
-        condition: service_completed_successfully
-      order-migration-read-usa:
-        condition: service_completed_successfully
-      payment-migration-egypt:
-        condition: service_completed_successfully
-      payment-migration-usa:
-        condition: service_completed_successfully
-      payment-migration-read-egypt:
-        condition: service_completed_successfully
-      payment-migration-read-usa:
-        condition: service_completed_successfully
-    networks:
-      - microservices-network # Shared network for all services
-    restart: "no" # Run once and exit
-    volumes:
-      - ./infra/postgres/replica-setup.sh:/scripts/replica-setup.sh:ro # Replica setup script
-    command: [ "sh", "/scripts/replica-setup.sh" ]
 
   # =========================
   # API Gateway
@@ -484,6 +292,20 @@ services:
         condition: service_healthy
     networks:
       - microservices-network # Shared network for all services
+    ports:
+      - "80:8080"
+      - "443:8081"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1" ]
       interval: 10s
