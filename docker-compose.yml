@@ -171,29 +171,6 @@ services:
       start_period: 20s
 
   # =========================
-  # RabbitMQ Init (Topology)
-  # =========================
-  rabbitmq-init:
-    image: rabbitmq:3-management-alpine # Uses rabbitmqadmin CLI
-    container_name: rabbitmq-init # Friendly container name
-    env_file:
-      - .env/rabbitmq.env
-    depends_on:
-      rabbitmq:
-        condition: service_healthy # Run after RabbitMQ is ready
-    networks:
-      - microservices-network # Shared network for all services
-    restart: "no" # Run once and exit
-    volumes:
-      - ./infra/rabbitmq/init-topology.sh:/scripts/init-topology.sh:ro
-    command: [ "sh", "/scripts/init-topology.sh" ]
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-  # =========================
   # Order Service API
   # =========================
   order-service:
