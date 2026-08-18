@@ -18,6 +18,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data # Persist database data
       - ./infra/postgres/write-startup.sh:/usr/local/bin/write-startup.sh:ro
+      - ./OrderService_Migration.sql:/scripts/order-migration.sql:ro
+      - ./PaymentService_Migration.sql:/scripts/payment-migration.sql:ro
     entrypoint: [ "sh", "/usr/local/bin/write-startup.sh" ]
     networks:
       - microservices-network # Shared network for all services
@@ -53,6 +55,9 @@ services:
       - read_db_data:/var/lib/postgresql/data # Persist replica data
       - ./infra/postgres/read-startup.sh:/usr/local/bin/read-startup.sh:ro
     entrypoint: [ "sh", "/usr/local/bin/read-startup.sh" ]
+    depends_on:
+      write-db:
+        condition: service_healthy
     networks:
       - microservices-network # Shared network for all services
     restart: unless-stopped
@@ -171,6 +176,24 @@ services:
       start_period: 20s
 
   # =========================
+  # RabbitMQ Topology Init
+  # =========================
+  rabbitmq-init:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-init
+    env_file:
+      - .env/rabbitmq.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./infra/rabbitmq/init-topology.sh:/usr/local/bin/init-topology.sh:ro
+    entrypoint: [ "sh", "/usr/local/bin/init-topology.sh" ]
+    networks:
+      - microservices-network
+    restart: "no"
+
+  # =========================
   # Order Service API
   # =========================
   order-service:
@@ -185,10 +208,8 @@ services:
     depends_on:
       pgbouncer:
         condition: service_healthy # Wait for PgBouncer
-      rabbitmq:
-        condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
-        condition: service_completed_successfully # Wait for topology
+        condition: service_completed_successfully # Wait for RabbitMQ topology
       redis:
         condition: service_healthy # Wait for Redis
     networks:
@@ -226,10 +247,8 @@ services:
     depends_on:
       pgbouncer:
         condition: service_healthy # Wait for PgBouncer
-      rabbitmq:
-        condition: service_healthy # Wait for RabbitMQ
       rabbitmq-init:
-        condition: service_completed_successfully # Wait for topology
+        condition: service_completed_successfully # Wait for RabbitMQ topology
       redis:
         condition: service_healthy # Wait for Redis
     networks:
@@ -271,6 +290,7 @@ services:
       - microservices-network # Shared network for all services
     ports:
       - "80:8080"
+      - "5000:8080"
       - "443:8081"
     restart: unless-stopped
     deploy:
@@ -295,9 +315,6 @@ volumes:
   read_db_data: # Replica DB volume
   redis_data: # Redis volume
   rabbitmq_data: # RabbitMQ volume
-  debezium_order_data: # Debezium order volume
-  debezium_payment_data:
-    # Debezium payment volume
 
 networks:
   microservices-network:

@@ -39,3 +39,40 @@ services:
     ports:
       - "5000:8080" # API Gateway HTTP
 
+  # =========================
+  # PgBouncer (local IDE access)
+  # =========================
+  pgbouncer:
+    ports:
+      - "6432:6432"
+
+  # =========================
+  # PostgreSQL Primary (local IDE access)
+  # =========================
+  write-db:
+    ports:
+      - "5432:5432"
+
+  # =========================
+  # PostgreSQL Standby Replica (local IDE access)
+  # =========================
+  read-db:
+    ports:
+      - "5433:5432"
+
+  # =========================
+  # Redis (local IDE access)
+  # =========================
+  redis:
+    ports:
+      - "6379:6379"
+
+  # =========================
+  # RabbitMQ (local IDE access + UI)
+  # =========================
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+

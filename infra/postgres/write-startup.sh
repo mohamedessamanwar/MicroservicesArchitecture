@@ -21,8 +21,11 @@ grep -q "host all all all scram-sha-256" "$PGDATA/pg_hba.conf" || echo "host all
 grep -q "host replication all all scram-sha-256" "$PGDATA/pg_hba.conf" || echo "host replication all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d template1 -c "SELECT pg_reload_conf();"
 
+
+
 echo "Creating replication user idempotently..."
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d template1 -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${POSTGRES_REPLICATION_USER:-replicator}') THEN CREATE ROLE ${POSTGRES_REPLICATION_USER:-replicator} LOGIN REPLICATION PASSWORD '${POSTGRES_REPLICATION_PASSWORD:-change_me}'; END IF; END \$\$;"
+
 
 echo "PostgreSQL primary ready. Verifying/creating databases idempotently..."
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d template1 <<-EOSQL
@@ -33,8 +36,7 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d template1 <<-EOSQL
     SELECT 'CREATE DATABASE "PaymentDb-USA"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'PaymentDb-USA')\gexec
 EOSQL
 
-# NOTE: Application schema migrations (order-migration.sql / payment-migration.sql) are NO LONGER executed here.
-# Schema migrations are handled exclusively by dedicated EF Core Migration Bundle containers.
+
 
 echo "Verifying/creating logical replication publications idempotently..."
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "OrderDb" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'order_pub') THEN CREATE PUBLICATION order_pub FOR ALL TABLES; END IF; END \$\$;"

@@ -1,0 +1,377 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "name": "Microservices Architecture API",
+    "description": "Complete Postman Collection for Microservices Architecture Platform via API Gateway and direct service endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "orderServiceDirectUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "paymentServiceDirectUrl",
+      "value": "http://localhost:8082",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health & Observability",
+      "item": [
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/health",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Checks health of the API Gateway reverse proxy."
+          }
+        },
+        {
+          "name": "API Gateway Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/metrics",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["metrics"]
+            },
+            "description": "Returns OpenTelemetry Prometheus metrics from YARP and ASP.NET Core."
+          }
+        },
+        {
+          "name": "Order Service Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{orderServiceDirectUrl}}/health/live",
+              "host": ["{{orderServiceDirectUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Direct health check for Order Service."
+          }
+        },
+        {
+          "name": "Payment Service Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentServiceDirectUrl}}/health/live",
+              "host": ["{{paymentServiceDirectUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Direct health check for Payment Service."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Order Service (via Gateway)",
+      "item": [
+        {
+          "name": "Egypt - Get All Orders (Read Replica)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "Egypt",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Orders",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            },
+            "description": "Retrieves orders for Egypt tenant from the read replica via PgBouncer."
+          }
+        },
+        {
+          "name": "Egypt - Create Order (Primary Write + Outbox)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('lastCreatedOrderId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "Egypt",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"11111111-1111-1111-1111-111111111111\",\n  \"totalAmount\": 250.75\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Orders",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            },
+            "description": "Creates an order for Egypt tenant in the primary database and records an outbox message."
+          }
+        },
+        {
+          "name": "Egypt - Process Order Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "Egypt",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Orders/{{lastCreatedOrderId}}/process-payment",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Orders", "{{lastCreatedOrderId}}", "process-payment"]
+            },
+            "description": "Processes payment for a given order."
+          }
+        },
+        {
+          "name": "USA - Get All Orders (Read Replica)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "USA",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Orders",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            },
+            "description": "Retrieves orders for USA tenant from the read replica via PgBouncer."
+          }
+        },
+        {
+          "name": "USA - Create Order (Primary Write + Outbox)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "USA",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"22222222-2222-2222-2222-222222222222\",\n  \"totalAmount\": 999.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Orders",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            },
+            "description": "Creates an order for USA tenant in the primary database and records an outbox message."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Payment Service (via Gateway)",
+      "item": [
+        {
+          "name": "Egypt - Create Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.data && jsonData.data.id) {",
+                  "    pm.collectionVariables.set('lastCreatedPaymentId', jsonData.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "Egypt",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"1c954624-7f83-46e9-b8df-5457857272d6\",\n  \"amount\": 250.75\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Payments",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Payments"]
+            },
+            "description": "Creates a payment record in PaymentDb (Egypt) primary database."
+          }
+        },
+        {
+          "name": "Egypt - Update Payment Status to Completed",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "Egypt",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Payments/{{lastCreatedPaymentId}}/status?status=1",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Payments", "{{lastCreatedPaymentId}}", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "1",
+                  "description": "0=Pending, 1=Completed, 2=Failed"
+                }
+              ]
+            },
+            "description": "Updates payment status to Completed (1) and triggers order synchronization."
+          }
+        },
+        {
+          "name": "USA - Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Country",
+                "value": "USA",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"7166d62a-7e59-4d22-a147-8c6f87579fce\",\n  \"amount\": 999.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{gatewayUrl}}/api/v1/Payments",
+              "host": ["{{gatewayUrl}}"],
+              "path": ["api", "v1", "Payments"]
+            },
+            "description": "Creates a payment record in PaymentDb-USA primary database."
+          }
+        }
+      ]
+    }
+  ]
+}
