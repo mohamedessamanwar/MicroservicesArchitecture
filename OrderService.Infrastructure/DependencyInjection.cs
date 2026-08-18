@@ -1,9 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OrderService.Domain.Interfaces;
 
-using OrderService.Infrastructure.Messaging.RabbitMqConfiguration;
+
 using OrderService.Infrastructure.Repositories;
 using OrderService.Infrastructure.Dependency;
 using Micro.Shared.Persistence;
@@ -30,8 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IRuntimeMetricSnapshotRepository, RuntimeMetricSnapshotRepository>();
         services.AddScoped<ISpikeReportRepository, SpikeReportRepository>();
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-        services.Configure<RabbitMqConfiguration>(
-            configuration.GetSection(RabbitMqConfiguration.SectionName));
+
 
         services.AddRabbitImplementation(configuration);
         services.AddRabbitImplementationConsumerJobs();

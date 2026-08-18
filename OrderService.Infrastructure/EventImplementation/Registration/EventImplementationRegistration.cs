@@ -1,0 +1,85 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using OrderService.Application.Interfaces;
+using OrderService.Infrastructure.EventImplementation.Connections;
+using OrderService.Infrastructure.EventImplementation.Consumers;
+using OrderService.Infrastructure.EventImplementation.Topology;
+
+
+using OrderService.Infrastructure.EventImplementation.Inbox;
+using OrderService.Infrastructure.EventImplementation.Outbox;
+
+using OrderService.Infrastructure.EventImplementation.Serialization;
+
+namespace OrderService.Infrastructure.Dependency;
+
+/// <summary>
+/// Messaging DI split from feature folders: core (outbox + connections + publish) vs consumer jobs (optional extension method).
+/// </summary>
+public static class EventImplementationRegistration
+{
+    /// <summary>
+    /// Registers RabbitMQ provider options, TCP connections, channel pool, outbox/inbox stores, JSON serializer, routing registry,
+    /// application <see cref="IEventPublisher"/>, and the outbox dispatcher background job.
+    /// 
+    /// Does not register consumer hosted services - use <see cref="AddRabbitImplementationConsumerJobs"/> for those.
+    /// </summary>
+    public static IServiceCollection AddRabbitImplementation(this IServiceCollection services, IConfiguration configuration)
+    {
+        services
+            .AddOptions<MessagingOptions>()
+            .Bind(configuration.GetSection("Messaging"))
+            .Validate(o => o.Countries.Count > 0, "At least one country must be configured under Messaging:Countries.")
+            .Validate(o => o.Providers.Count > 0, "At least one RabbitMQ provider must be configured under Messaging:Providers.")
+            .ValidateOnStart();
+
+        // Singleton: one TCP connection registry + channel pool shared by dispatcher (and optional publishers).
+        services.AddSingleton<IRabbitMqConnectionRegistry, RabbitMqConnectionRegistry>();
+        services.AddSingleton<IChannelPool, RabbitMqChannelPool>();
+        services.AddSingleton<IEventRoutingRegistry, EventRoutingRegistry>();
+        services.AddSingleton<IMessageSerializer, SystemTextJsonMessageSerializer>();
+        services.AddSingleton<IRabbitMqNamePrefixer, RabbitMqNamePrefixer>();
+        // Scoped: same lifetime as DbContext for transactional outbox writes in requests.
+        services.AddScoped<IOutboxStore, OutboxStore>();
+        services.AddScoped<IInboxStore, InboxStore>();
+        services.AddScoped<IEventPublisher, EventPublisher>();
+        services.AddScoped<IEventConsumerResolver, EventConsumerResolver>();
+        services.AddScoped<OrderCreatedEventConsumer>();
+
+        // Register one hosted job per country so each dispatcher resolves the proper scoped connection string.
+        var messagingOptions = configuration.GetSection("Messaging").Get<MessagingOptions>();
+        var countries = messagingOptions?.Countries ?? new List<string>();
+
+        foreach (var country in countries)
+        {
+            services.AddSingleton<IHostedService>(sp => new OutboxDispatcherJob(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IChannelPool>(),
+                sp.GetRequiredService<IRabbitMqNamePrefixer>(),
+                sp.GetRequiredService<ILogger<OutboxDispatcherJob>>(),
+                country));
+
+            services.AddSingleton<IHostedService>(sp => new OrderEventsConsumerJob(
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IRabbitMqConnectionRegistry>(),
+                sp.GetRequiredService<IRabbitMqNamePrefixer>(),
+                sp.GetRequiredService<ILogger<OrderEventsConsumerJob>>(),
+                country));
+        }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers queue consumer background jobs and their <see cref="IConsumer{T}"/> handlers.
+    /// Kept separate so you can enable/disable consumers without touching core messaging registration.
+    /// </summary>
+    public static IServiceCollection AddRabbitImplementationConsumerJobs(this IServiceCollection services)
+    {
+        return services;
+    }
+}
+
