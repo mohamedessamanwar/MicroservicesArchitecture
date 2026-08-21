@@ -89,28 +89,6 @@ public static class OutboundHttpServiceCollectionExtensions
         {
             options.BaseUrl = configuration[fallbackBaseUrlConfigKey] ?? string.Empty;
         }
-
-        if (string.IsNullOrWhiteSpace(options.BaseUrl))
-        {
-            throw new InvalidOperationException(
-                $"Missing outbound base URL for {clientName}. Configure OutboundHttp:Clients:{clientName}:BaseUrl or {fallbackBaseUrlConfigKey}.");
-        }
-
-        if (string.IsNullOrWhiteSpace(options.CallerIdentity.AppId))
-        {
-            options.CallerIdentity.AppId =
-                configuration["OutboundHttp:CallerIdentity:AppId"] ??
-                configuration["ServiceIdentity:AppId"] ??
-                configuration["App:AppId"] ??
-                string.Empty;
-        }
-
-        if (string.IsNullOrWhiteSpace(options.CallerIdentity.AppId))
-        {
-            throw new InvalidOperationException(
-                $"Missing outbound AppId for {clientName}. Configure OutboundHttp:CallerIdentity:AppId or OutboundHttp:Clients:{clientName}:CallerIdentity:AppId.");
-        }
-
         return options;
     }
 }

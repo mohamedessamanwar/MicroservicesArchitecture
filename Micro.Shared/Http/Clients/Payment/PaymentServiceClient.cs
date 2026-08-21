@@ -8,21 +8,21 @@ namespace Micro.Shared.Http.Clients.Payment;
 
 public sealed class PaymentServiceClient : DownstreamApiClientBase, IPaymentServiceClient
 {
-    public PaymentServiceClient(HttpClient httpClient, ILogger<PaymentServiceClient> logger)
-        : base(httpClient, logger)
-    {
-    }
+     public PaymentServiceClient(HttpClient httpClient, ILogger<PaymentServiceClient> logger)
+         : base(httpClient, logger)
+     {
+     }
 
-    public Task<ApiResult<PaymentDto>> CreatePaymentAsync(
-        CreatePaymentRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        // Write endpoints with side-effects default to no-retry unless explicitly idempotent.
-        return PostAsync<CreatePaymentRequest, PaymentDto>(
-            endpoint: "api/v1/payments",
-            request: request,
-            pipeline: ResiliencePipelineKeys.NoRetry,
-            useIdempotencyKey: false,
-            cancellationToken: cancellationToken);
-    }
+     public Task<ApiResult<PaymentDto>> CreatePaymentAsync(
+         CreatePaymentRequest request,
+         CancellationToken cancellationToken = default)
+     {
+          // Write endpoints with side-effects default to no-retry unless explicitly idempotent.
+          return PostAsync<CreatePaymentRequest, PaymentDto>(
+              endpoint: "api/v1/payments",
+              request: request,
+              pipeline: ResiliencePipelineKeys.NoRetry,
+              useIdempotencyKey: false,
+              cancellationToken: cancellationToken);
+     }
 }

@@ -19,8 +19,8 @@ builder.Services.AddFluentValidationAutoValidation();
 
 if (EF.IsDesignTime)
 {
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentDatabase")));
+     builder.Services.AddDbContext<AppDbContext>(options =>
+         options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentDatabase")));
 }
 
 // Layer registrations
@@ -39,8 +39,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+     app.UseSwagger();
+     app.UseSwaggerUI();
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
