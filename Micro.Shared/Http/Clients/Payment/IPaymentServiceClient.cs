@@ -7,5 +7,6 @@ public interface IPaymentServiceClient
 {
     Task<ApiResult<PaymentDto>> CreatePaymentAsync(
         CreatePaymentRequest request,
+        string? idempotencyKey = null,
         CancellationToken cancellationToken = default);
 }

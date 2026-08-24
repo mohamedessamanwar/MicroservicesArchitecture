@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using OrderService.Application.Common;
 using OrderService.Domain.Entities;
 using OrderService.Domain.ReadModels;
+using Micro.Shared.Persistence;
 
 namespace OrderService.Infrastructure.Data;
 
@@ -8,10 +11,19 @@ namespace OrderService.Infrastructure.Data;
 /// Production-grade DbContext configured dynamically at runtime
 /// using the ConnectionStringResolver based on the Request Context.
 /// </summary>
-public class AppDbContext : DbContext
+public class AppDbContext : DbContext, IOrderDbContext
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    private readonly ConnectionStringResolver _connectionStringResolver;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ConnectionStringResolver connectionStringResolver)
+        : base(options)
     {
+        _connectionStringResolver = connectionStringResolver;
+    }
+
+    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+    {
+        return Database.BeginTransactionAsync(cancellationToken);
     }
 
     public DbSet<Order> Orders => Set<Order>();
@@ -19,10 +31,26 @@ public class AppDbContext : DbContext
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<RuntimeMetricSnapshotRecord> RuntimeMetricSnapshots => Set<RuntimeMetricSnapshotRecord>();
     public DbSet<SpikeReportRecord> SpikeReports => Set<SpikeReportRecord>();
+    
+    public DbSet<Saga> Sagas => Set<Saga>();
+    public DbSet<SagaStep> SagaSteps => Set<SagaStep>();
+
+    public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.HasDefaultSchema("order");
+
+        modelBuilder.Entity<IdempotencyRecord>(entity =>
+        {
+            entity.HasKey(e => e.IdempotencyKey);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(128);
+            entity.Property(e => e.RequestName).HasMaxLength(128).IsRequired();
+        });
 
         // Entities (Primary/Write DB)
         modelBuilder.Entity<Order>(entity =>
@@ -34,6 +62,19 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CustomerId).IsRequired();
             entity.HasIndex(e => e.CustomerId);
             entity.HasIndex(e => e.Status);
+
+            entity.HasMany(e => e.OrderDetails)
+                .WithOne(od => od.Order)
+                .HasForeignKey(od => od.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrderDetail>(entity =>
+        {
+            entity.ToTable("OrderDetails");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ProductId).IsRequired();
+            entity.Property(e => e.Quantity).IsRequired();
         });
         modelBuilder.Entity<InboxMessage>(entity =>
         {
@@ -75,6 +116,31 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-       
+        modelBuilder.Entity<Saga>(entity =>
+        {
+            entity.ToTable("Sagas");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CorrelationId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Type).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.BusinessId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CurrentStep).HasMaxLength(100).IsRequired();
+            
+            entity.HasIndex(e => e.CorrelationId).IsUnique(); // Idempotency key must be unique
+        });
+
+        modelBuilder.Entity<SagaStep>(entity =>
+        {
+            entity.ToTable("SagaSteps");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.StepName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CompensationStatus).HasConversion<string>().HasMaxLength(50).IsRequired();
+            
+            entity.HasOne(e => e.Saga)
+                .WithMany(s => s.Steps)
+                .HasForeignKey(e => e.SagaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

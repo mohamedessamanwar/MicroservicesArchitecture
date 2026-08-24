@@ -8,6 +8,9 @@ public class Order : IBaseEntity
     public Guid CustomerId { get; set; }
     public decimal TotalAmount { get; set; }
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
+    
+    public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
+
     public DateTime? Created { get; set; }
     public DateTime? Modified { get; set; }
 }

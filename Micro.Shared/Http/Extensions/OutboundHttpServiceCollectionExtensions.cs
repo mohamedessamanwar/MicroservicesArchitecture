@@ -35,6 +35,14 @@ public static class OutboundHttpServiceCollectionExtensions
             "Services:OrderService");
     }
 
+    public static IServiceCollection AddProductServiceClient(this IServiceCollection services, IConfiguration configuration)
+    {
+        return services.AddDownstreamClient<Micro.Shared.Http.Clients.Product.IProductServiceClient, Micro.Shared.Http.Clients.Product.ProductServiceClient>(
+            configuration,
+            "ProductService",
+            "Services:ProductService");
+    }
+
     private static IServiceCollection AddDownstreamClient<TClient, TImplementation>(
         this IServiceCollection services,
         IConfiguration configuration,

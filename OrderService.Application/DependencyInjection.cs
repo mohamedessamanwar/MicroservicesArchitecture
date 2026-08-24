@@ -17,7 +17,9 @@ public static class DependencyInjection
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(Behaviors.ValidationBehavior<,>));
         services.AddAutoMapper(cfg => cfg.AddMaps(assembly));
         services.AddValidatorsFromAssembly(assembly);
-
+        
+        services.AddScoped<OrderService.Application.UseCases.ICreateOrderUseCase, OrderService.Application.UseCases.CreateOrderUseCase>();
+        
         return services;
     }
 }

@@ -4,8 +4,6 @@ using Payment.Application.Commands;
 using Payment.Application.DTOs;
 using Payment.Application.Common;
 using Payment.Core.Entities;
-using Micro.Shared.Idempotency;
-
 
 namespace Payment.Api.Controllers;
 
@@ -23,7 +21,6 @@ public class PaymentsController : ControllerBase
      }
 
      [HttpPost]
-     // [Idempotent(ExpirationHours = 1)]
      public async Task<IActionResult> Create([FromBody] CreatePaymentDto dto)
      {
           var command = new CreatePaymentCommand(dto);

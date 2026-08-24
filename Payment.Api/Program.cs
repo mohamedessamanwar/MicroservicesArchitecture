@@ -2,7 +2,6 @@ using FluentValidation.AspNetCore;
 using Micro.Shared.Caching;
 using Micro.Shared.Health;
 using Micro.Shared.Http.Extensions;
-using Micro.Shared.Idempotency;
 using Micro.Shared.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Payment.Application;
@@ -27,7 +26,6 @@ if (EF.IsDesignTime)
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddRedisCaching(builder.Configuration);
-builder.Services.AddIdempotency();
 
 // Microservice Clients
 builder.Services.AddOutboundHttpInfrastructure();

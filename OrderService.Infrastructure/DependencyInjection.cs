@@ -22,6 +22,7 @@ public static class DependencyInjection
         // Register shared infrastructure
         services.AddSharedPersistence();
         services.AddAppDbContext<AppDbContext>();
+        services.AddScoped<OrderService.Application.Common.IOrderDbContext>(provider => provider.GetRequiredService<AppDbContext>());
 
         // Register metric services
         services.AddMetricServices(configuration);
@@ -34,6 +35,8 @@ public static class DependencyInjection
 
         services.AddRabbitImplementation(configuration);
         services.AddRabbitImplementationConsumerJobs();
+
+        services.AddHostedService<OrderService.Infrastructure.Workers.SagaCompensationWorker>();
 
         return services;
     }

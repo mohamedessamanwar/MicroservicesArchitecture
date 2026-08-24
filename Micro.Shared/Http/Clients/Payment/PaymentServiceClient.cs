@@ -15,14 +15,21 @@ public sealed class PaymentServiceClient : DownstreamApiClientBase, IPaymentServ
 
      public Task<ApiResult<PaymentDto>> CreatePaymentAsync(
          CreatePaymentRequest request,
+         string? idempotencyKey = null,
          CancellationToken cancellationToken = default)
      {
-          // Write endpoints with side-effects default to no-retry unless explicitly idempotent.
+          var options = new OutboundHttpRequestOptions();
+          if (!string.IsNullOrEmpty(idempotencyKey))
+          {
+              options.Headers["X-Idempotency-Key"] = idempotencyKey;
+          }
+
           return PostAsync<CreatePaymentRequest, PaymentDto>(
               endpoint: "api/v1/payments",
               request: request,
               pipeline: ResiliencePipelineKeys.NoRetry,
-              useIdempotencyKey: false,
+              useIdempotencyKey: true,
+              requestOptions: options,
               cancellationToken: cancellationToken);
      }
 }

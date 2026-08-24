@@ -4,4 +4,4 @@ using OrderService.Application.DTOs;
 
 namespace OrderService.Application.Commands;
 
-public record CreateOrderCommand(CreateOrderDto Dto) : IRequest<CommandResult<OrderResponseDto>>;
+public record CreateOrderCommand(CreateOrderDto Dto, string IdempotencyKey) : IRequest<CommandResult<OrderResponseDto>>;

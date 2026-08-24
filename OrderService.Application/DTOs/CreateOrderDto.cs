@@ -1,3 +1,4 @@
 namespace OrderService.Application.DTOs;
 
-public record CreateOrderDto(Guid CustomerId, decimal TotalAmount);
+public record OrderItemDto(Guid ProductId, int Quantity);
+public record CreateOrderDto(Guid CustomerId, List<OrderItemDto> Items, decimal TotalAmount);

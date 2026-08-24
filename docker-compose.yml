@@ -286,6 +286,8 @@ services:
         condition: service_healthy
       payment-service:
         condition: service_healthy
+      product-service:
+        condition: service_healthy
     networks:
       - microservices-network # Shared network for all services
     ports:

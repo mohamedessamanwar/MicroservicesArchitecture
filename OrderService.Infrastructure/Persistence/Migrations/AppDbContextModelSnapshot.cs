@@ -62,6 +62,12 @@ namespace OrderService.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("Modified")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -253,6 +259,91 @@ namespace OrderService.Infrastructure.Persistence.Migrations
                     b.ToTable("RuntimeMetricSnapshots", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.Saga", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BusinessId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrentStep")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId")
+                        .IsUnique();
+
+                    b.ToTable("Sagas", (string)null);
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.SagaStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CompensationStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SagaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("StepName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SagaId");
+
+                    b.ToTable("SagaSteps", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.SpikeReportRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -284,6 +375,17 @@ namespace OrderService.Infrastructure.Persistence.Migrations
                     b.ToTable("SpikeReports", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.SagaStep", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Saga", "Saga")
+                        .WithMany("Steps")
+                        .HasForeignKey("SagaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Saga");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.SpikeReportRecord", b =>
                 {
                     b.HasOne("OrderService.Domain.Entities.RuntimeMetricSnapshotRecord", "Snapshot")
@@ -293,6 +395,11 @@ namespace OrderService.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Snapshot");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.Saga", b =>
+                {
+                    b.Navigation("Steps");
                 });
 #pragma warning restore 612, 618
         }

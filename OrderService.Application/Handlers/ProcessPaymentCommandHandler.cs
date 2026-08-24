@@ -49,7 +49,7 @@ public class ProcessPaymentCommandHandler
 
         var paymentResult = await _paymentService.CreatePaymentAsync(
             paymentRequest,
-            cancellationToken);
+            cancellationToken: cancellationToken);
             
         if (!paymentResult.Success)
         {

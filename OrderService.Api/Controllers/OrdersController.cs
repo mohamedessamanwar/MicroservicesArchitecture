@@ -5,6 +5,7 @@ using OrderService.Application.Queries;
 using OrderService.Application.DTOs;
 using OrderService.Domain.Entities;
 using Micro.Shared.Http.Models;
+using OrderService.Api.Filters;
 
 namespace OrderService.Api.Controllers;
 
@@ -42,11 +43,12 @@ public class OrdersController : ControllerBase
     }
 
     [HttpPost]
+    [RequireIdempotency]
     [ProducesResponseType(typeof(ApiResult<OrderResponseDto>), 201)]
     [ProducesResponseType(typeof(ApiResult<OrderResponseDto>), 400)]
-    public async Task<IActionResult> Create([FromBody] CreateOrderDto dto)
+    public async Task<IActionResult> Create([FromBody] CreateOrderDto dto, [FromHeader(Name = "X-Idempotency-Key")] string idempotencyKey)
     {
-        var command = new CreateOrderCommand(dto);
+        var command = new CreateOrderCommand(dto, idempotencyKey);
         var result = await _mediator.Send(command);
 
         if (!result.Success)
