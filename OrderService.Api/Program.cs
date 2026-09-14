@@ -21,6 +21,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddRedisCaching(builder.Configuration);
 builder.Services.AddOutboundHttpInfrastructure();
 builder.Services.AddPaymentServiceClient(builder.Configuration);
+builder.Services.AddProductServiceClient(builder.Configuration);
 builder.Services.AddMicroserviceHealthChecks(builder.Configuration);
 
 // Add Protection Services

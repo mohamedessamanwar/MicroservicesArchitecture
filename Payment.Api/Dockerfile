@@ -17,7 +17,7 @@ COPY ["Payment.Application/Payment.Application.csproj", "Payment.Application/"]
 COPY ["Payment.Infrastructure/Payment.Infrastructure.csproj", "Payment.Infrastructure/"]
 COPY ["Payment.Core/Payment.Core.csproj", "Payment.Core/"]
 COPY ["Micro.Shared/Micro.Shared.csproj", "Micro.Shared/"]
-RUN dotnet restore "./Payment.Api/Payment.Api.csproj"
+RUN dotnet restore "./Payment.Api/Payment.Api.csproj" --disable-parallel
 COPY . .
 WORKDIR "/src/Payment.Api"
 RUN dotnet build "./Payment.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build

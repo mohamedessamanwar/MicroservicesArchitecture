@@ -3,13 +3,15 @@ using ProductService.Domain.Interfaces;
 using ProductService.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
-
+using Micro.Shared.Health;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Health Checks for Docker
+builder.Services.AddMicroserviceHealthChecks(builder.Configuration);
 // Register MediatR for Application layer
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.Load("ProductService.Application")));
 
@@ -28,7 +30,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthorization();
 app.MapControllers();
-
+app.MapMicroserviceHealthChecks();
 // Apply migrations on startup
 using (var scope = app.Services.CreateScope())
 {

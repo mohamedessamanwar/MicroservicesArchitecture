@@ -17,7 +17,7 @@ COPY ["OrderService.Application/OrderService.Application.csproj", "OrderService.
 COPY ["OrderService.Infrastructure/OrderService.Infrastructure.csproj", "OrderService.Infrastructure/"]
 COPY ["OrderService.Domain/OrderService.Domain.csproj", "OrderService.Domain/"]
 COPY ["Micro.Shared/Micro.Shared.csproj", "Micro.Shared/"]
-RUN dotnet restore "./OrderService.Api/OrderService.Api.csproj"
+RUN dotnet restore "./OrderService.Api/OrderService.Api.csproj" --disable-parallel
 COPY . .
 WORKDIR "/src/OrderService.Api"
 RUN dotnet build "./OrderService.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build

@@ -272,6 +272,45 @@ services:
       start_period: 30s
 
   # =========================
+  # Product Service API
+  # =========================
+  product-service:
+    build:
+      context: . # Solution root
+      dockerfile: ProductService.Api/Dockerfile # Product API Dockerfile
+      args:
+        BUILD_CONFIGURATION: Release
+    container_name: product-service # Friendly container name
+    env_file:
+      - .env/product-service.env
+    depends_on:
+      pgbouncer:
+        condition: service_healthy # Wait for PgBouncer
+      rabbitmq-init:
+        condition: service_completed_successfully # Wait for RabbitMQ topology
+      redis:
+        condition: service_healthy # Wait for Redis
+    networks:
+      - microservices-network # Shared network for all services
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # =========================
   # API Gateway
   # =========================
   api-gateway:
@@ -316,7 +355,8 @@ volumes:
   postgres_data: # Write DB volume
   read_db_data: # Replica DB volume
   redis_data: # Redis volume
-  rabbitmq_data: # RabbitMQ volume
+  rabbitmq_data:
+    # RabbitMQ volume
 
 networks:
   microservices-network:

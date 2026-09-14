@@ -13,9 +13,9 @@ namespace OrderService.Infrastructure.Data;
 /// </summary>
 public class AppDbContext : DbContext, IOrderDbContext
 {
-    private readonly ConnectionStringResolver _connectionStringResolver;
+    private readonly IConnectionStringResolver _connectionStringResolver;
 
-    public AppDbContext(DbContextOptions<AppDbContext> options, ConnectionStringResolver connectionStringResolver)
+    public AppDbContext(DbContextOptions<AppDbContext> options, IConnectionStringResolver connectionStringResolver)
         : base(options)
     {
         _connectionStringResolver = connectionStringResolver;

@@ -32,8 +32,10 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d template1 <<-EOSQL
     SELECT 'CREATE DATABASE "write_db"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'write_db')\gexec
     SELECT 'CREATE DATABASE "OrderDb"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'OrderDb')\gexec
     SELECT 'CREATE DATABASE "PaymentDb"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'PaymentDb')\gexec
+    SELECT 'CREATE DATABASE "ProductDb"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ProductDb')\gexec
     SELECT 'CREATE DATABASE "OrderDb-USA"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'OrderDb-USA')\gexec
     SELECT 'CREATE DATABASE "PaymentDb-USA"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'PaymentDb-USA')\gexec
+    SELECT 'CREATE DATABASE "ProductDb-USA"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ProductDb-USA')\gexec
 EOSQL
 
 
@@ -43,6 +45,8 @@ psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "OrderDb" -c "DO \$\$ BEGIN IF NO
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "PaymentDb" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'payment_pub') THEN CREATE PUBLICATION payment_pub FOR ALL TABLES; END IF; END \$\$;"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "OrderDb-USA" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'order_pub_usa') THEN CREATE PUBLICATION order_pub_usa FOR ALL TABLES; END IF; END \$\$;"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "PaymentDb-USA" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'payment_pub_usa') THEN CREATE PUBLICATION payment_pub_usa FOR ALL TABLES; END IF; END \$\$;"
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "ProductDb" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'product_pub') THEN CREATE PUBLICATION product_pub FOR ALL TABLES; END IF; END \$\$;"
+psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "ProductDb-USA" -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'product_pub_usa') THEN CREATE PUBLICATION product_pub_usa FOR ALL TABLES; END IF; END \$\$;"
 
 echo "Write-DB startup wrapper complete. Waiting for main PostgreSQL process..."
 wait "$PG_PID"
