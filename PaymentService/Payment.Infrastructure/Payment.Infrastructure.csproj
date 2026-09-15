@@ -13,15 +13,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RabbitMQ.Client" Version="6.8.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OrderService.Domain\OrderService.Domain.csproj" />
-    <ProjectReference Include="..\OrderService.Application\OrderService.Application.csproj" />
-    <ProjectReference Include="..\Micro.Shared\Micro.Shared.csproj" />
+    <ProjectReference Include="..\Payment.Core\Payment.Core.csproj" />
+    <ProjectReference Include="..\Payment.Application\Payment.Application.csproj" />
+    <ProjectReference Include="..\..\Micro.Shared\Micro.Shared.csproj" />
   </ItemGroup>
 
 </Project>

@@ -11,12 +11,11 @@
     <PackageReference Include="FluentValidation" Version="11.5.1" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.5.1" />
     <PackageReference Include="AutoMapper" Version="16.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Payment.Core\Payment.Core.csproj" />
-    <ProjectReference Include="..\Micro.Shared\Micro.Shared.csproj" />
+    <ProjectReference Include="..\..\Micro.Shared\Micro.Shared.csproj" />
+    <ProjectReference Include="..\OrderService.Domain\OrderService.Domain.csproj" />
   </ItemGroup>
 
 </Project>

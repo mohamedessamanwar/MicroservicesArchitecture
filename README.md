@@ -1,3 +1,30 @@
+# Microservices Architecture Learning Project
+
+## Context
+This project is hosted on Git and serves as a comprehensive learning resource for mastering **Microservices Architecture**. It is designed to explore the real-world problems of distributed systems, such as data consistency, network failures, resilient communication, and multi-tenant data isolation.
+
+## System Architecture Overview
+The platform consists of **3 Core Microservices** and an **API Gateway**:
+1. **Order Service:** Manages the order lifecycle.
+2. **Payment Service:** Processes user payments idempotently.
+3. **Product Service:** Manages inventory and catalog.
+4. **API Gateway (YARP):** Routes traffic to the backend services.
+
+### Communication Patterns
+- **Synchronous Communication:** The API Gateway forwards HTTP requests to the microservices.
+- **Asynchronous Communication:** Services communicate with each other using **RabbitMQ**. For example, the Order Service publishes an OrderCreated event to a topic exchange, which the Payment and Product services consume to process payments and deduct inventory.
+- **Resilience:** HTTP pipelines use Polly for retries and circuit breakers. Async flows use the Inbox/Outbox patterns and Saga Orchestration/Choreography to ensure eventual consistency.
+
+## How to Run Docker Compose
+To run the entire system locally:
+1. Ensure Docker Desktop is running.
+2. Run the following command in the root directory:
+   `docker compose up -d`
+3. **Inspect Containers:** To see the status of the running microservices and infrastructure:
+   `docker compose ps`
+4. **View Logs:** If a container is unhealthy or you want to debug an issue:
+   `docker compose logs --tail=50 <service_name>` (e.g., docker compose logs order-service)
+
 # 🏗️ Microservices Architecture Diagram — E-Commerce Platform
 
 > A comprehensive visual blueprint of the distributed system architecture, covering all infrastructure components, communication protocols, and architectural patterns.
@@ -1759,4 +1786,5 @@ SELECT slot_name, active,
        pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS lag_bytes
 FROM pg_replication_slots;
 ```
+
 

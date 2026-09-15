@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\ProductService.Application\ProductService.Application.csproj" />
     <ProjectReference Include="..\ProductService.Domain\ProductService.Domain.csproj" />
-    <ProjectReference Include="..\Micro.Shared\Micro.Shared.csproj" />
+    <ProjectReference Include="..\..\Micro.Shared\Micro.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

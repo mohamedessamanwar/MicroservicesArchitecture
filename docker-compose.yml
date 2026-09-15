@@ -199,7 +199,7 @@ services:
   order-service:
     build:
       context: . # Solution root
-      dockerfile: OrderService.Api/Dockerfile # Order API Dockerfile
+      dockerfile: OrderService/OrderService.Api/Dockerfile # Order API Dockerfile
       args:
         BUILD_CONFIGURATION: Release
     container_name: order-service # Friendly container name
@@ -238,7 +238,7 @@ services:
   payment-service:
     build:
       context: . # Solution root
-      dockerfile: Payment.Api/Dockerfile # Payment API Dockerfile
+      dockerfile: PaymentService/Payment.Api/Dockerfile # Payment API Dockerfile
       args:
         BUILD_CONFIGURATION: Release
     container_name: payment-service # Friendly container name
@@ -277,7 +277,7 @@ services:
   product-service:
     build:
       context: . # Solution root
-      dockerfile: ProductService.Api/Dockerfile # Product API Dockerfile
+      dockerfile: ProductService/ProductService.Api/Dockerfile # Product API Dockerfile
       args:
         BUILD_CONFIGURATION: Release
     container_name: product-service # Friendly container name

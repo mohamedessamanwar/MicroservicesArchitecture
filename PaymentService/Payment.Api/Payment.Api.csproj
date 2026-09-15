@@ -20,7 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Payment.Application\Payment.Application.csproj" />
     <ProjectReference Include="..\Payment.Infrastructure\Payment.Infrastructure.csproj" />
-    <ProjectReference Include="..\Micro.Shared\Micro.Shared.csproj" />
+    <ProjectReference Include="..\..\Micro.Shared\Micro.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

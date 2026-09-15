@@ -28,7 +28,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\OrderService.Application\OrderService.Application.csproj" />
 		<ProjectReference Include="..\OrderService.Infrastructure\OrderService.Infrastructure.csproj" />
-		<ProjectReference Include="..\Micro.Shared\Micro.Shared.csproj" />
+		<ProjectReference Include="..\..\Micro.Shared\Micro.Shared.csproj" />
 	</ItemGroup>
 
 </Project>
