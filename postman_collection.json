@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "E-Commerce Microservices",
+    "description": "Postman collection for the Microservices Architecture project. Includes multi-tenancy headers and idempotency keys.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "country",
+      "value": "Egypt",
+      "type": "string",
+      "description": "Multi-tenancy header. Can be 'Egypt' or 'USA'"
+    }
+  ],
+  "item": [
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Get Orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Idempotency-Key", "value": "{{$guid}}", "description": "Required idempotency key for creating orders to avoid duplicates" },
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{$guid}}\",\n  \"items\": [\n    {\n      \"productId\": \"{{$guid}}\",\n      \"quantity\": 1,\n      \"price\": 100.00\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Orders"]
+            }
+          }
+        },
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Orders/:id/process-payment",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Orders", ":id", "process-payment"],
+              "variable": [
+                { "key": "id", "value": "{{$guid}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{$guid}}\",\n  \"amount\": 100.00,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Payments"]
+            }
+          }
+        },
+        {
+          "name": "Update Payment Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Payments/:id/status?status=Success",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Payments", ":id", "status"],
+              "query": [
+                { "key": "status", "value": "Success" }
+              ],
+              "variable": [
+                { "key": "id", "value": "{{$guid}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Decrease Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Products/:id/decrease-count?amount=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Products", ":id", "decrease-count"],
+              "query": [
+                { "key": "amount", "value": "1" }
+              ],
+              "variable": [
+                { "key": "id", "value": "{{$guid}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Increase Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Products/:id/increase-count?amount=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Products", ":id", "increase-count"],
+              "query": [
+                { "key": "amount", "value": "1" }
+              ],
+              "variable": [
+                { "key": "id", "value": "{{$guid}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bulk Decrease Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"productId\": \"{{$guid}}\",\n    \"quantity\": 1\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Products/decrease-bulk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Products", "decrease-bulk"]
+            }
+          }
+        },
+        {
+          "name": "Bulk Increase Stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Country", "value": "{{country}}", "description": "Tenant identifier" },
+              { "key": "X-Correlation-Id", "value": "{{$guid}}", "description": "Correlation ID for tracing" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"productId\": \"{{$guid}}\",\n    \"quantity\": 1\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/Products/increase-bulk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "Products", "increase-bulk"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

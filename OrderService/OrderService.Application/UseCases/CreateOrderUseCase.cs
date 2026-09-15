@@ -47,7 +47,7 @@ public class CreateOrderUseCase : ICreateOrderUseCase
             if (cachedResponse != null)
             {
                 // Request already processed successfully
-                return CommandResult<OrderResponseDto>.Ok(cachedResponse, "Order completed successfully via Saga (Idempotent response).");
+                return CommandResult<OrderResponseDto>.Ok(cachedResponse, "Order completed successfully  (Idempotent response).");
             }
             
             // Request is currently processing or failed previously

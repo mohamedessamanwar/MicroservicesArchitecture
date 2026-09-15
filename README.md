@@ -1787,4 +1787,128 @@ SELECT slot_name, active,
 FROM pg_replication_slots;
 ```
 
+---
+
+## 25. Detailed Use Case: Create Order Saga & Resilience
+
+> [!NOTE]
+> This section details the complete architectural flow, idempotency implementation, and Polly resilience configurations for the `CreateOrderUseCase`.
+
+### 1. Saga Flow & Rollback (Compensation)
+
+The flow is divided into three main phases: Initialization (Atomic), Reservation, and Payment.
+
+#### Complete Flow Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client (e.g., UI/Mobile)
+    participant OS as OrderService (Saga Orchestrator)
+    participant PS as ProductService (Inventory)
+    participant PayS as PaymentService (Billing)
+    
+    C->>OS: POST /api/v1/Orders <br/>(X-Idempotency-Key, X-Country)
+    
+    rect rgb(240, 248, 255)
+        note right of OS: Phase 1: Idempotency & Atomic Init
+        OS->>OS: Begin DbTransaction
+        OS->>OS: Insert IdempotencyRecord
+        OS->>OS: Create Order (Status: Pending)
+        OS->>OS: Create Saga (Status: Executing)
+        OS->>OS: Commit Transaction
+    end
+    
+    rect rgb(240, 255, 240)
+        note right of OS: Phase 2: Reserve Inventory
+        OS->>PS: POST /api/v1/Products/decrease-bulk
+        alt Reservation Fails
+            PS-->>OS: 400 Bad Request / Timeout
+            OS->>OS: Saga = Failed, Order = Cancelled
+            OS-->>C: 400 Bad Request (Insufficient Stock)
+        else Reservation Succeeds
+            PS-->>OS: 200 OK
+        end
+    end
+    
+    rect rgb(255, 253, 240)
+        note right of OS: Phase 3: Charge Payment & Rollback
+        OS->>PayS: POST /api/v1/Payments
+        
+        alt Payment Fails (Compensation Triggered)
+            PayS-->>OS: 400 Bad Request / Timeout
+            OS->>OS: Saga = Compensating
+            
+            note right of OS: Compensate Previous Step
+            OS->>PS: POST /api/v1/Products/increase-bulk
+            PS-->>OS: 200 OK (Stock Restored)
+            
+            OS->>OS: Saga = Compensated, Order = Cancelled
+            OS-->>C: 400 Bad Request (Payment Failed)
+            
+        else Payment Succeeds
+            PayS-->>OS: 201 Created
+            OS->>OS: Saga = Completed, Order = Paid
+            OS-->>C: 201 Created (Order Response)
+        end
+    end
+```
+
+### 2. Code Methodology & Best Practices
+
+#### Idempotency & Concurrency handling
+To prevent race conditions where a client clicks "Submit" twice, the API enforces an `X-Idempotency-Key` header.
+- **Atomic Transaction**: The `OrderService` starts an EF Core transaction.
+- **Unique Constraint**: It attempts to insert the `IdempotencyRecord` containing the key. If another thread with the same key is processing simultaneously, the database enforces a unique constraint violation (`DbUpdateException`).
+- **Conflict Resolution**: The second request immediately aborts, rolls back its transaction, and returns a `409 Conflict` (or returns the cached successful response if the first request already finished).
+
+#### Saga State Machine Persistence
+- **State Tables**: The saga orchestrator maintains a `Saga` and multiple `SagaStep` records in PostgreSQL.
+- **Compensation Execution**: If `ChargePayment` fails, the Saga orchestrator updates the previous `ReserveInventory` step's `CompensationStatus` to `Executing`, and fires the compensation HTTP call to `ProductService.IncreaseStockBulkAsync`. Once successful, the Saga transitions to `Compensated`.
+
+### 3. Resilience Pipelines (Polly Configurations)
+
+The `OrderService` interacts with `ProductService` and `PaymentService` via strongly-typed HTTP Clients, heavily wrapped in Polly resilience pipelines.
+
+#### ProductService Client (`Write` Pipeline)
+Used for deducting and restoring stock. Since it's a `POST` method modifying state, the `ResiliencePipelineSelector` assigns it to the **Write Pipeline**.
+
+- **No Retries**: We avoid retrying POST requests locally to prevent accidental double-deduction in edge cases where timeouts happen but the server actually processed the request. (Though idempotency keys on the product side mitigate this, we rely on the Saga's compensation instead of aggressive HTTP retries).
+- **Timeout**: 12 Seconds.
+- **Circuit Breaker**: Trips if the Product Service goes down, instantly failing fast for subsequent orders.
+
+```mermaid
+flowchart LR
+    Start([OrderService Request]) --> BH[Bulkhead Isolation]
+    BH --> CB{Circuit Breaker}
+    CB -->|Closed| NR[No Retry Policy]
+    CB -->|Open| Fail([Fast Fail])
+    NR --> TO[Timeout 12s]
+    TO --> Dest[(ProductService)]
+```
+
+#### PaymentService Client (`NoRetry` Pipeline)
+Used for charging the user's card. Financial transactions are highly sensitive to network retries.
+
+- **Strict No Retry**: Assigned explicitly to the **NoRetry** pipeline. If the payment network hiccups, we DO NOT retry automatically. We fail fast and explicitly compensate (refund/restore stock).
+- **Timeout**: 10 Seconds.
+- **Circuit Breaker**: Aggressive threshold. If payment gateway is down, all orders immediately fail to prevent massive queued backlogs.
+
+```mermaid
+flowchart LR
+    Start([OrderService Request]) --> BH[Bulkhead Isolation]
+    BH --> CB{Circuit Breaker}
+    CB -->|Closed| NR[Strict No Retry]
+    CB -->|Open| Fail([Fast Fail])
+    NR --> TO[Timeout 10s]
+    TO --> Dest[(PaymentService)]
+```
+
+### 4. Multi-Tenancy (Egypt vs USA)
+
+The architecture supports multiple geographic tenants out of the box, routed by the YARP API Gateway.
+1. The client sends `X-Country: Egypt` or `X-Country: USA`.
+2. The `HeaderPropagationHandler` automatically injects this header into the `HttpClient` for both the `ProductServiceClient` and `PaymentServiceClient`.
+3. Consequently, the Product and Payment services connect to their respective isolated databases (e.g., `ProductDb` vs `ProductDb-USA`) via PgBouncer routing, all without the `CreateOrderUseCase` needing to explicitly handle tenant connection strings or context passing.
+
 
