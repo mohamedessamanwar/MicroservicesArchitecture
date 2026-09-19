@@ -9,9 +9,6 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
       DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
       VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
-    ports:
-      - "8080:8080" # Order HTTP
-      - "4024:4024" # VS debugger port
 
   # =========================
   # Payment Service (local debug)
@@ -23,8 +20,6 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
       DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
       VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
-    ports:
-      - "8082:8080" # Payment HTTP
 
   # =========================
   # Product Service (local debug)
@@ -36,8 +31,6 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
       DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
       VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
-    ports:
-      - "8084:8080" # Product HTTP
 
   # =========================
   # API Gateway (local debug)
@@ -49,8 +42,6 @@ services:
       ASPNETCORE_HTTP_PORTS: 8080 # HTTP port inside container
       DOTNET_USE_POLLING_FILE_WATCHER: "1" # Better file watching in containers
       VSDBG_PMI_ENABLE: "1" # Enable VS debugger process monitoring
-    ports:
-      - "5000:8080" # API Gateway HTTP
 
   # =========================
   # PgBouncer (local IDE access)
