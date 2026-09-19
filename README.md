@@ -1,15 +1,31 @@
-# Microservices Architecture Platform
-
-This project is a comprehensive example of a modern, distributed e-commerce platform built with **.NET 8**, **PostgreSQL**, **Redis**, **RabbitMQ**, and **Docker**. It demonstrates real-world patterns like CQRS, Saga Orchestration vs Choreography, Transactional Outbox, Multi-Tenancy, and advanced Connection Pooling.
+<div align="center">
+  <h1>🛍️ Enterprise Microservices Architecture</h1>
+  <p><strong>A production-ready, highly scalable, and resilient distributed e-commerce platform built to demonstrate advanced microservice design patterns.</strong></p>
+</div>
 
 ---
 
-## 1. Architecture of the Project
+## 🌟 Overview & Business Value
 
-The platform consists of three core microservices and an API Gateway. The architecture is designed to be highly decoupled, scalable, and resilient to failures.
+This repository serves as a comprehensive portfolio piece demonstrating the architectural design, implementation, and deployment of a modern distributed system. It solves complex distributed systems challenges such as **data consistency across boundaries**, **network failure resilience**, **connection pooling at scale**, and **multi-tenant data isolation**.
+
+### 🛠️ Technology Stack
+- **Core**: .NET 8, C#, ASP.NET Core Web API
+- **Databases**: PostgreSQL 16 (Primary & Physical Replicas), PgBouncer
+- **Caching & Rate Limiting**: Redis 7
+- **Message Broker**: RabbitMQ 3 (AMQP)
+- **Gateway**: YARP (Yet Another Reverse Proxy)
+- **Containerization**: Docker & Docker Compose
+- **Resilience**: Polly
+
+---
+
+## 1. High-Level Architecture Topology
+
+The platform consists of three independently deployable bounded contexts (Microservices) and a centralized API Gateway.
 
 > [!IMPORTANT]
-> **Data Access Rule**: All database traffic (both READ and WRITE) MUST route through **PgBouncer** to prevent connection exhaustion. Read operations never bypass the connection pooler.
+> **Data Access Rule**: All database traffic (both READ and WRITE) routes through **PgBouncer** to prevent PostgreSQL connection exhaustion. 
 
 ```mermaid
 %%{init: {"theme": "dark", "themeVariables": { "primaryColor": "#1e293b", "edgeLabelBackground":"#1e293b" }}}%%
@@ -38,60 +54,31 @@ flowchart TD
         PGB -->|Writes| DB_Write[(Primary DB - write-db)]
         PGB -->|Reads| DB_Read[(Replica DB - read-db)]
         
-        DB_Write -.->|Logical Replication| DB_Read
+        DB_Write -.->|Physical Streaming Replication| DB_Read
     end
 ```
 
-### Components
-- **API Gateway (YARP)**: The single entry point for clients. Handles routing, rate limiting, and forwards multi-tenant headers (`X-Country`).
-- **Order Service**: Manages the order lifecycle (Pending, Confirmed, Cancelled).
-- **Payment Service**: Processes charges and refunds idempotently.
-- **Product Service**: Manages catalog and inventory levels.
+### Component Breakdown
+- **API Gateway (YARP)**: The single ingress point. It offloads cross-cutting concerns like SSL termination, global rate limiting, and multi-tenant HTTP header injection (`X-Country`).
+- **Order Service (Orchestrator)**: Manages the `CreateOrder` Saga, maintaining state and triggering compensations on failure.
+- **Payment Service**: Processes financial transactions idempotently. 
+- **Product Service**: Manages the catalog cache and inventory stock decrements.
 
 ---
 
-## 2. Advanced HTTP Communication & Resilience (Polly)
+## 2. Distributed Transactions: Saga Pattern
 
-Synchronous communication between microservices relies heavily on `HttpClient` configured with advanced Polly pipelines to ensure system stability during network hiccups.
+In a microservices architecture, traditional 2-Phase Commit (2PC) distributed locks are an anti-pattern due to poor scalability and single points of failure. This platform leverages the **Saga Pattern** to ensure eventual consistency.
 
-### The Pipeline Architecture
+We use **both** Saga Orchestration and Saga Choreography, applying each where its trade-offs make the most sense.
 
-The platform dynamically injects Polly resilience policies into strongly-typed HTTP clients via `OutboundHttpServiceCollectionExtensions.cs`. We never rely on default HTTP timeouts.
+### A. Saga Orchestration (The Order Creation Flow)
+We use **Orchestration** when we need strict, centralized control and immediate synchronous feedback for the client (e.g., when a user clicks "Checkout"). 
 
-```mermaid
-%%{init: {"theme": "dark"}}%%
-flowchart LR
-    Start([HTTP Request]) --> BH[Bulkhead Isolation]
-    BH --> CB{Circuit Breaker}
-    CB -->|Closed| Retry[Retry Policy]
-    CB -->|Open| Fail([Fast Fail - Exception])
-    Retry --> TO[Timeout Policy]
-    TO --> Dest[(Destination Microservice)]
-```
+The `OrderService` acts as the central brain. It persists the state of the transaction in `Saga` and `SagaStep` tables. It executes synchronous HTTP commands to the `ProductService` and `PaymentService`.
 
-### Specific Use Cases
-
-1. **Write Pipeline (Product Service)**: Used for mutating state (e.g., deducting stock).
-   - **Configuration**: Zero retries (to prevent double deduction), 12-second timeout.
-   - **Why?**: Idempotency is hard to guarantee for generic POSTs; we rely on the Saga compensation rather than aggressive HTTP retries.
-2. **NoRetry Pipeline (Payment Service)**: Used for highly sensitive financial transactions.
-   - **Configuration**: Strict zero retries, 10-second timeout, aggressive circuit breaker.
-   - **Why?**: If the payment gateway hiccups, we fail fast and refund/restore stock instead of blindly retrying and potentially double-charging a customer.
-3. **Multi-Tenancy via HTTP**: The `HeaderPropagationHandler` automatically intercepts outgoing requests and attaches the `X-Country` header, ensuring downstream services act on the correct tenant's database.
-
----
-
-## 3. Saga Pattern: Orchestration vs. Choreography
-
-Distributed transactions cannot use traditional ACID database locks. We must use a Saga. Our platform implements both paradigms depending on the strictness required by the workflow.
-
-### A. Saga Orchestration (Used in `CreateOrderUseCase`)
-In an Orchestrated Saga, one central controller explicitly tells other services what to do via synchronous HTTP Commands.
-
-**How we use it:**
-The `OrderService` orchestrates the order creation because we want immediate, synchronous feedback to the user and strict transaction control.
-- **State Machine**: The Orchestrator persists the state in `Saga` and `SagaStep` tables.
-- **Compensation**: If `PaymentService.CreatePaymentAsync` fails, the orchestrator explicitly calls `ProductService.IncreaseStockBulkAsync` to restore the reserved inventory.
+**Compensation (Rollback) Logic:**
+If `PaymentService` fails (e.g., card declined), the `OrderService` explicitly calls a compensation endpoint on `ProductService` to restore the deducted stock, ensuring the system returns to a consistent state.
 
 ```mermaid
 %%{init: {"theme": "dark"}}%%
@@ -120,122 +107,47 @@ sequenceDiagram
     end
 ```
 
-### B. Saga Choreography (Used in Background Events)
-In a Choreographed Saga, there is no central brain. Services broadcast Domain Events via RabbitMQ, and other services react to them independently.
-
-**How we use it:**
-We use this for loosely coupled downstream processes. E.g., when an order completes, `OrderCreated` is published. The Notification Service or Analytics Service can subscribe to this without the Order Service knowing they exist.
+### B. Saga Choreography (Domain Events)
+We use **Choreography** for downstream, loosely-coupled side effects. When an order completes, it broadcasts an `OrderCreated` event to RabbitMQ. Any service (like a Notification or Analytics service) can subscribe and react without the Order Service ever knowing about them.
 
 ---
 
-## 4. RabbitMQ Advanced Connection Management
+## 3. Advanced HTTP Resilience (Polly Pipelines)
 
-RabbitMQ acts as the message broker for our Transactional Outbox/Inbox asynchronous event flows. We implement strict resource pooling to prevent connection leaks.
+Synchronous network calls are inherently unreliable. This project deeply integrates **Polly** into the `HttpClient` factory (`OutboundHttpServiceCollectionExtensions.cs`) to prevent cascading failures.
 
-### TCP Connections vs. Channels
+### Tailored Pipelines
+We don't use a "one size fits all" timeout. Pipelines are tailored to the idempotency and risk of the downstream operation.
 
 ```mermaid
 %%{init: {"theme": "dark"}}%%
-flowchart TD
-    subgraph Order Service
-        Pool[RabbitMqChannelPool]
-        Reg[RabbitMqConnectionRegistry]
-    end
-    
-    subgraph RabbitMQ Broker
-        TCP[Single TCP Connection per Provider]
-        CH1(Channel / Model 1)
-        CH2(Channel / Model 2)
-        CH3(Channel / Model N...)
-    end
-    
-    Reg ==>|Maintains One Long-Lived| TCP
-    Pool -.->|Rents| CH1
-    Pool -.->|Rents| CH2
-    Pool -.->|Rents| CH3
-    
-    CH1 --> TCP
-    CH2 --> TCP
-    CH3 --> TCP
+flowchart LR
+    Start(["HTTP Request"]) --> BH["Bulkhead Isolation"]
+    BH --> CB{"Circuit Breaker"}
+    CB -->|"Closed (Healthy)"| Retry["Retry Policy"]
+    CB -->|"Open (Unhealthy)"| Fail(["Fast Fail - Exception"])
+    Retry --> TO["Timeout Policy"]
+    TO --> Dest[("Destination Microservice")]
 ```
 
-1. **`IRabbitMqConnectionRegistry`**:
-   - .NET does *not* pool RabbitMQ connections by default.
-   - TCP connections are extremely heavy. The registry creates exactly **one `IConnection` per RabbitMQ provider** and holds it open for the lifetime of the application.
-2. **`IChannelPool` (`RabbitMqChannelPool`)**:
-   - Channels (`IModel`) are lightweight virtual connections inside the TCP connection, but they are **not thread-safe**.
-   - We maintain a `ConcurrentBag<IModel>`. When a background worker needs to publish an `OrderCreated` event to the exchange, it `Rent()`s a channel, publishes the message, and then calls `Return()` to place the channel back in the bag for the next thread.
+1. **Write Pipeline**: Used for generic state mutations (e.g., deducting stock). 
+   - *Config*: 0 Retries, 12s Timeout, Standard Circuit Breaker.
+   - *Rationale*: Retrying `POST` requests blindly over the network can lead to double-deductions if the initial request succeeded but the response timed out. We rely on Saga Compensation instead of HTTP retries.
+2. **NoRetry Pipeline (Payments)**: Used for financial transactions.
+   - *Config*: Strict 0 Retries, 10s Timeout, Aggressive Circuit Breaker.
+   - *Rationale*: We NEVER auto-retry credit card charges. We fail fast and allow the orchestrator to trigger a refund/rollback.
 
 ---
 
-## 5. Idempotency & Database Atomicity
+## 4. CQRS & Physical Database Replication
 
-**Idempotency** ensures that an operation applied multiple times yields the same result.
+The database architecture is designed to handle a massive disparity between Read and Write operations (common in E-Commerce where catalog browsing vastly outnumbers checkouts).
 
-### How it is applied in `CreateOrderUseCase`:
-1. **Atomic Transaction**: The API receives an `X-Idempotency-Key` header. `OrderService` opens an EF Core transaction.
-2. **Unique Constraints**: It attempts to insert the key into the `IdempotencyRecord` table. If a duplicate request comes in (e.g., client double-clicked submit), PostgreSQL enforces a unique constraint violation.
-3. **Conflict Resolution**: The duplicate request catches the `DbUpdateException`, immediately aborts, and returns a `409 Conflict`.
-4. **Redis Check**: Payment Service double-checks idempotency keys stored in Redis before authorizing credit card charges.
+### Connection Pooling with PgBouncer
+Instead of each microservice opening hundreds of direct TCP connections to PostgreSQL, they connect to **PgBouncer** (Port 6432) operating in transaction-pooling mode. This multiplexes thousands of lightweight service connections onto a small number of real database connections, drastically reducing PostgreSQL memory overhead.
 
----
-
-## 6. Transactional Outbox & Inbox Pattern
-
-> [!CAUTION]
-> **The Dual-Write Problem**: If a service saves to the database and then publishes an event to RabbitMQ as two separate operations, a crash between them causes **data inconsistency** (e.g., the DB has the order, but the payment service never gets the event).
-
-To solve this, we use the Outbox and Inbox patterns for all asynchronous messaging.
-
-```mermaid
-%%{init: {"theme": "dark"}}%%
-flowchart TD
-    subgraph Publisher Service
-        API[API Endpoint]
-        
-        subgraph ACID_Tx[Single ACID Transaction]
-            Biz[(Business Table)]
-            Outbox[(Outbox Table)]
-        end
-        
-        Worker[Background Worker]
-    end
-    
-    MQ{RabbitMQ}
-    
-    subgraph Consumer Service
-        Inbox[(Inbox Table)]
-        Handler[Event Handler]
-    end
-    
-    API -->|1. Insert Data| Biz
-    API -->|1. Insert Event| Outbox
-    
-    Worker -->|2. Poll Unpublished| Outbox
-    Worker -->|3. Publish (AMQP)| MQ
-    Worker -.->|4. Mark as Published| Outbox
-    
-    MQ -->|5. Deliver| Inbox
-    Inbox -->|6. If New MessageId| Handler
-```
-
-1. **Transactional Outbox**: Business data and domain events are committed to PostgreSQL in the *exact same transaction*. A background worker polls the `Outbox` table and safely pushes messages to RabbitMQ, retrying on failure.
-2. **Idempotent Inbox**: The Consumer service receives the event and inserts the `MessageId` into its `Inbox` table. If RabbitMQ accidentally delivers the message twice, the database unique constraint on `MessageId` prevents duplicate processing.
-
----
-
-## 7. CQRS & Advanced PostgreSQL Replication
-
-Our database architecture separates reads from writes at the connection level to maximize throughput.
-
-### The Read/Write Path via PgBouncer
-As shown in the primary architecture, **both reads and writes route through PgBouncer**. 
-- PostgreSQL processes are heavy (~10MB RAM per connection). PgBouncer runs in transaction-pooling mode, multiplexing thousands of microservice connections onto a handful of real database connections.
-- The microservice uses two connection strings: `WriteConnection` (points to `PgBouncer -> Primary`) and `ReadConnection` (points to `PgBouncer -> Replica`).
-
-### Physical WAL Streaming (Streaming Replication)
-
-Unlike logical replication which replicates SQL commands, this project uses **Physical Streaming Replication**. The Replica is a bit-for-bit exact copy of the Primary.
+### Physical WAL Streaming
+This project utilizes **Physical Streaming Replication** (not logical). The replica is a bit-for-bit exact binary copy of the primary database.
 
 ```mermaid
 %%{init: {"theme": "dark"}}%%
@@ -264,43 +176,116 @@ sequenceDiagram
     D->>R: Stream missed WAL files
 ```
 
-- **Replication Slots**: We use replication slots (created via `pg_basebackup -S slot_name`). If the replica goes down, the primary *will not delete* the WAL files the replica needs, guaranteeing the replica can always catch up when it reconnects.
+- **Replication Slots**: Created via `pg_basebackup -S slot_name`. This is a critical production safety net. If the replica goes offline, the slot forces the primary to retain the WAL (Write-Ahead Log) files until the replica reconnects, guaranteeing it can catch up without a full rebuild.
 
 ---
 
-## 8. API Gateway, Rate Limiting & Distributed Caching
+## 5. Atomicity & The Outbox/Inbox Pattern
 
-The `ApiGateway` (YARP) does more than route requests. It actively protects the downstream microservices from abuse.
+> [!CAUTION]
+> **The Dual-Write Problem**: Saving an order to the database and publishing a RabbitMQ event are two distinct operations. A crash between them results in a permanently inconsistent system.
 
-### Distributed Token Bucket Rate Limiting (Redis)
-We implemented a highly scalable `RedisTokenBucketRateLimiter`.
+To solve this, we implement the **Transactional Outbox & Idempotent Inbox** patterns.
+
+```mermaid
+%%{init: {"theme": "dark"}}%%
+flowchart TD
+    subgraph Publisher Service
+        API["API Endpoint"]
+        
+        subgraph ACID_Tx["Single ACID Transaction"]
+            Biz[("Business Table")]
+            Outbox[("Outbox Table")]
+        end
+        
+        Worker["Background Worker"]
+    end
+    
+    MQ{"RabbitMQ"}
+    
+    subgraph Consumer Service
+        Inbox[("Inbox Table")]
+        Handler["Event Handler"]
+    end
+    
+    API -->|"1. Insert Data"| Biz
+    API -->|"1. Insert Event"| Outbox
+    
+    Worker -->|"2. Poll Unpublished"| Outbox
+    Worker -->|"3. Publish (AMQP)"| MQ
+    Worker -.->|"4. Mark as Published"| Outbox
+    
+    MQ -->|"5. Deliver"| Inbox
+    Inbox -->|"6. If New MessageId"| Handler
+```
+
+1. **Transactional Outbox**: Business data and domain events are committed to PostgreSQL in the *exact same ACID transaction*. A background worker safely pushes the outbox messages to RabbitMQ, providing at-least-once delivery guarantees.
+2. **Idempotent Inbox**: The Consumer service inserts the `MessageId` into its `Inbox` table. Because `MessageId` is a Unique Constraint, duplicate RabbitMQ deliveries safely fail at the database level, ensuring exactly-once processing.
+
+---
+
+## 6. Optimized RabbitMQ Connection Architecture
+
+Default .NET RabbitMQ implementations often suffer from connection leaks. This project features a highly optimized TCP pooling layer.
+
+```mermaid
+%%{init: {"theme": "dark"}}%%
+flowchart TD
+    subgraph Order Service
+        Pool["RabbitMqChannelPool"]
+        Reg["RabbitMqConnectionRegistry"]
+    end
+    
+    subgraph RabbitMQ Broker
+        TCP["Single TCP Connection per Provider"]
+        CH1("Channel / Model 1")
+        CH2("Channel / Model 2")
+        CH3("Channel / Model N...")
+    end
+    
+    Reg ==>|"Maintains One Long-Lived"| TCP
+    Pool -.->|"Rents"| CH1
+    Pool -.->|"Rents"| CH2
+    Pool -.->|"Rents"| CH3
+    
+    CH1 --> TCP
+    CH2 --> TCP
+    CH3 --> TCP
+```
+
+1. **`IRabbitMqConnectionRegistry`**: TCP connections are expensive. The registry creates exactly **one `IConnection` per RabbitMQ provider** (tenant) and keeps it alive.
+2. **`IChannelPool`**: Channels (`IModel`) are multiplexed inside the TCP connection, but they are not thread-safe. We use a `ConcurrentBag<IModel>` to allow threads to `Rent()` a channel, publish their event, and `Return()` it efficiently without opening new ports.
+
+---
+
+## 7. Distributed Rate Limiting (Redis)
+
+To protect the system from DDoS or noisy neighbors, the API Gateway implements a **Token Bucket Rate Limiter**.
 
 ```mermaid
 %%{init: {"theme": "dark"}}%%
 flowchart LR
-    Client --> GW[API Gateway]
-    GW --> RL[Rate Limiting Middleware]
+    Client["Client"] --> GW["API Gateway"]
+    GW --> RL["Rate Limiting Middleware"]
     
-    RL -->|Check Lua Script| Redis[(Redis 7)]
+    RL -->|"Check Lua Script"| Redis[("Redis 7")]
     
-    alt Tokens Available
-        Redis -->> RL: OK
-        RL --> Target[Order Service]
-    else Bucket Empty
-        Redis -->> RL: Reject
-        RL --> Client: 429 Too Many Requests
-    end
+    Redis -.->|"Returns Result"| Check{"Tokens Available?"}
+    
+    Check -->|"Yes (OK)"| Target["Order Service"]
+    Check -->|"No (Empty)"| Reject["Reject Request"]
+    Reject -->|"429 Too Many Requests"| Client
 ```
 
-- **Why Redis?** In a multi-instance Gateway deployment, in-memory rate limiting fails because traffic is load-balanced across multiple Gateway instances. Redis ensures a global rate limit per IP or User ID.
-- **Lua Scripts**: The token deduction is written in a Lua script inside Redis to guarantee atomicity and prevent race conditions when multiple concurrent requests hit the gateway.
+- **Why Redis?** Local in-memory rate limiting fails in a multi-instance Gateway deployment (traffic is load-balanced). Redis ensures a globally consistent rate limit per IP or User.
+- **Lua Scripts**: The token deduction logic is executed inside a Lua script on the Redis server, guaranteeing strict atomicity and preventing race conditions under heavy concurrent load.
 
 ---
 
-## 9. Full Multi-Tenancy (Data Isolation)
+## 8. Seamless Multi-Tenancy
 
-The system supports `Egypt` and `USA` as separate tenants. 
+The platform serves multiple distinct countries (Egypt and USA) entirely dynamically, enforcing strict data isolation.
 
-1. **HTTP Routing**: `HeaderPropagationHandler` forwards `X-Country`.
-2. **Database Isolation**: PgBouncer routes `X-Country: USA` requests to the `ProductDb-USA` database, ensuring total data segregation.
-3. **Message Broker Isolation**: RabbitMQ topology scripts create tenant-specific exchanges and queues (`Egypt.order.exchange` vs `USA.order.exchange`). This prevents a "noisy neighbor" problem where a massive surge in USA orders delays the processing of Egyptian orders.
+1. **HTTP Routing**: A custom `HeaderPropagationHandler` intercepts all outgoing microservice HTTP calls and automatically attaches the `X-Country` header.
+2. **Database Isolation**: Depending on the header, PgBouncer routes the request to isolated databases (e.g., `ProductDb` vs `ProductDb-USA`).
+3. **Broker Isolation**: RabbitMQ initialization scripts generate tenant-specific exchanges and queues (e.g., `Egypt.order.exchange`). This isolates asynchronous workloads, ensuring a traffic spike in the USA does not delay processing in Egypt.
