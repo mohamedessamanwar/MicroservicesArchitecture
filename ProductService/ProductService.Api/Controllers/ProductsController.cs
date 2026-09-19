@@ -15,6 +15,13 @@ public class ProductsController : ControllerBase
         _mediator = mediator;
     }
 
+    [HttpPost]
+    public async Task<IActionResult> AddProduct([FromBody] AddProductCommand command, CancellationToken ct)
+    {
+        var productId = await _mediator.Send(command, ct);
+        return CreatedAtAction(nameof(AddProduct), new { id = productId }, new { Message = "Product created successfully.", ProductId = productId });
+    }
+
     [HttpPost("{id}/decrease-count")]
     public async Task<IActionResult> DecreaseCount(Guid id, [FromQuery] int amount, CancellationToken ct)
     {

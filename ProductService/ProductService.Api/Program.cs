@@ -31,11 +31,6 @@ if (app.Environment.IsDevelopment())
 app.UseAuthorization();
 app.MapControllers();
 app.MapMicroserviceHealthChecks();
-// Apply migrations on startup
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
-    dbContext.Database.Migrate();
-}
+
 
 app.Run();
