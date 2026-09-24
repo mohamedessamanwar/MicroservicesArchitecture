@@ -353,12 +353,114 @@ services:
       retries: 5
       start_period: 30s
 
+  # =========================
+  # Observability Stack
+  # =========================
+  
+  # Loki: The Log Aggregation Backend.
+  # Receives logs from the OpenTelemetry Collector and stores them.
+  # Accessed by Grafana to visualize logs.
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - microservices-network
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+
+  # Prometheus: The Time-Series Database for Metrics.
+  # Pulls (scrapes) metrics from the OpenTelemetry Collector every 15s.
+  # Accessed by Grafana to visualize dashboards.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - microservices-network
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+
+  # Tempo: The Distributed Tracing Backend.
+  # Receives trace spans from the OpenTelemetry Collector.
+  # Accessed by Grafana to show end-to-end request flows.
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./observability/tempo/tempo-config.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
+    networks:
+      - microservices-network
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+      - "4317" # internal OTLP gRPC
+
+  # OpenTelemetry Collector: The Central Telemetry Gateway.
+  # Receives all Logs, Metrics, and Traces from the Microservices via port 4317.
+  # Processes/batches them, then exports Logs to Loki, Traces to Tempo, and exposes Metrics for Prometheus.
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    networks:
+      - microservices-network
+    depends_on:
+      - loki
+      - tempo
+    restart: unless-stopped
+    ports:
+      - "4318:4318" # OTLP HTTP
+      - "8889:8889" # Prometheus metrics endpoint
+
+  # Grafana: The Visualization UI.
+  # Connects to Prometheus, Loki, and Tempo to provide unified dashboards.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    volumes:
+      - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - microservices-network
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
 volumes:
   postgres_data: # Write DB volume
   read_db_data: # Replica DB volume
   redis_data: # Redis volume
   rabbitmq_data:
     # RabbitMQ volume
+  loki_data:
+  prometheus_data:
+  tempo_data:
+  grafana_data:
 
 networks:
   microservices-network:

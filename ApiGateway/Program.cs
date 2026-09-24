@@ -1,7 +1,9 @@
 using ApiGateway.Middleware;
 using OpenTelemetry.Metrics;
+using Micro.Shared.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddApplicationObservability("api-gateway");
 
 // Configure Kestrel limits
 builder.WebHost.ConfigureKestrel(options =>
@@ -19,13 +21,11 @@ builder.Services.AddReverseProxy()
 // Add Health Checks
 builder.Services.AddHealthChecks();
 
-// Add OpenTelemetry Metrics for observability
+// Add OpenTelemetry Metrics for YARP
 builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
-        metrics.AddAspNetCoreInstrumentation();
         metrics.AddMeter("Yarp.ReverseProxy");
-        metrics.AddPrometheusExporter();
     });
 
 var app = builder.Build();

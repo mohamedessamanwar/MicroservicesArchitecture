@@ -4,7 +4,10 @@ using ProductService.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
 using Micro.Shared.Health;
+using Micro.Shared.Observability;
+
 var builder = WebApplication.CreateBuilder(args);
+builder.AddApplicationObservability("product-service");
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

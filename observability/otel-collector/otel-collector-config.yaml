@@ -1,0 +1,55 @@
+# Receivers define how the Collector accepts telemetry.
+# We use OTLP (OpenTelemetry Protocol) which supports both gRPC and HTTP.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317 # Microservices send data here via gRPC.
+      http:
+        endpoint: 0.0.0.0:4318
+
+# Processors alter or throttle the telemetry data before exporting.
+processors:
+  # The batch processor groups telemetry into chunks before sending, reducing network overhead.
+  batch:
+    send_batch_size: 1000
+    timeout: 1s
+  # The memory limiter drops data if the collector uses too much RAM, preventing crashes.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1000
+    spike_limit_mib: 200
+
+# Exporters define where the Collector sends the processed telemetry.
+exporters:
+  # Export Logs to Loki using OTLP over HTTP.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+  
+  # Expose a Prometheus endpoint. Prometheus will scrape this port.
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+  # Export Traces to Tempo using OTLP over gRPC.
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+# Pipelines link receivers, processors, and exporters together.
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]
