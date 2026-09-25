@@ -19,7 +19,7 @@ jobs:
   # ==========================================
   docker-publish:
     name: Push Docker Images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       # If one image fails to build, don't cancel the others. We want to see all errors.
       fail-fast: false
@@ -73,7 +73,7 @@ jobs:
     needs: docker-publish
     # always() ensures this runs even if the Docker step fails.
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Set Status Context
         id: status
