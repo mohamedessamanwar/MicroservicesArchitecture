@@ -7,8 +7,10 @@ using Microsoft.EntityFrameworkCore;
 using Payment.Application;
 using Payment.Infrastructure;
 using Payment.Infrastructure.Data;
+using Micro.Shared.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddApplicationObservability("payment-service");
 
 // Add services to the container.
 builder.Services.AddControllers();

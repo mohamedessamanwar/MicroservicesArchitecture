@@ -5,8 +5,10 @@ using Micro.Shared.Health;
 using Micro.Shared.Http.Extensions;
 using Micro.Shared.Middleware;
 using Micro.Shared.RateLimiting.Extensions;
+using Micro.Shared.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddApplicationObservability("order-service");
 
 // Add services to the container.
 builder.Services.AddControllers();

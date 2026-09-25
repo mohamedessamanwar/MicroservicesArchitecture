@@ -1,0 +1,111 @@
+name: Master Release Pipeline
+
+# Trigger this workflow ONLY when commits are pushed directly to 'master'
+# (which includes when a Pull Request is successfully merged).
+on:
+  push:
+    branches:
+      - master
+
+# Permissions: Needed to read repository contents.
+permissions:
+  contents: read
+
+jobs:
+  # ==========================================
+  # JOB 1: Docker Build & Push Matrix
+  # This runs in PARALLEL for all 4 microservices after the PR is merged.
+  # We do not need to rebuild or test here because the PR Validation pipeline already guaranteed it.
+  # ==========================================
+  docker-publish:
+    name: Push Docker Images
+    runs-on: self-hosted
+    strategy:
+      # If one image fails to build, don't cancel the others. We want to see all errors.
+      fail-fast: false
+      matrix:
+        include:
+          - service: order-service
+            dockerfile: OrderService/OrderService.Api/Dockerfile
+          - service: payment-service
+            dockerfile: PaymentService/Payment.Api/Dockerfile
+          - service: product-service
+            dockerfile: ProductService/ProductService.Api/Dockerfile
+          - service: api-gateway
+            dockerfile: ApiGateway/Dockerfile
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Registry
+        uses: docker/login-action@v3
+        with:
+          # Uses Docker Hub credentials stored securely in GitHub Secrets.
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Determine Image Tags
+        id: tags
+        # Generates two tags: 'latest' and a unique SHA tag (e.g., 'sha-1234abc')
+        run: |
+          SHA_SHORT=$(git rev-parse --short HEAD)
+          # We use DOCKER_USERNAME as the namespace in Docker Hub.
+          echo "tag_latest=${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:latest" >> $GITHUB_OUTPUT
+          echo "tag_sha=${{ secrets.DOCKER_USERNAME }}/${{ matrix.service }}:sha-${SHA_SHORT}" >> $GITHUB_OUTPUT
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # Tags the image with both 'latest' and the specific Git Commit SHA.
+          tags: |
+            ${{ steps.tags.outputs.tag_latest }}
+            ${{ steps.tags.outputs.tag_sha }}
+
+  # ==========================================
+  # JOB 3: Email Notification
+  # This job runs AFTER the Docker jobs finish (regardless of success or failure).
+  # ==========================================
+  notify:
+    name: Send Email Notification
+    needs: docker-publish
+    # always() ensures this runs even if the Docker step fails.
+    if: always()
+    runs-on: self-hosted
+    steps:
+      - name: Set Status Context
+        id: status
+        # Determines if previous steps failed or succeeded to format the email correctly.
+        run: |
+          if [ "${{ needs.docker-publish.result }}" == "success" ]; then
+            echo "status_text=SUCCESS" >> $GITHUB_OUTPUT
+          else
+            echo "status_text=FAILED" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send Email
+        # Uses an external Action to send an SMTP email.
+        # Requires SMTP_USERNAME and SMTP_PASSWORD in GitHub Repository Secrets.
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          # These are securely injected from GitHub Secrets, never hardcoded.
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "CI/CD Pipeline: ${{ steps.status.outputs.status_text }} - MicroservicesArchitecture"
+          to: developer-team@example.com
+          from: GitHub Actions
+          body: |
+            CI/CD Pipeline finished with status: ${{ steps.status.outputs.status_text }}
+            
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit SHA: ${{ github.sha }}
+            
+            Action URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            Please check the Actions tab for full logs and details.
