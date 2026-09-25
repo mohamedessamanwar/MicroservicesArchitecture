@@ -71,10 +71,12 @@ public static class ObservabilityExtensions
                     // so we can see slow queries in Tempo.
                     .AddEntityFrameworkCoreInstrumentation()
                     
-                    // OTLP Exporter:
                     // Sends the generated traces to the OpenTelemetry Collector via gRPC on port 4317.
                     // The Collector then forwards them to Grafana Tempo.
-                    .AddOtlpExporter(); 
+                    .AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri(configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://otel-collector:4317");
+                    }); 
             })
             .WithMetrics(metrics =>
             {
@@ -94,7 +96,10 @@ public static class ObservabilityExtensions
                     
                     // Sends the generated metrics to the OpenTelemetry Collector via gRPC on port 4317.
                     // The Collector then exposes them for Prometheus to scrape.
-                    .AddOtlpExporter(); 
+                    .AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri(configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://otel-collector:4317");
+                    }); 
             });
 
         // Configure Serilog with OpenTelemetry Sink

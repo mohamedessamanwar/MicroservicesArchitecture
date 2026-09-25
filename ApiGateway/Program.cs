@@ -26,6 +26,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics.AddMeter("Yarp.ReverseProxy");
+        metrics.AddPrometheusExporter();
     });
 
 var app = builder.Build();

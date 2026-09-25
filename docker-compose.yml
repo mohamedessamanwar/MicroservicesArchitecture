@@ -335,6 +335,7 @@ services:
       - ASPNETCORE_Kestrel__Certificates__Default__Password=yourpassword
     ports:
       - "443:8081"
+      - "8080:8080"
     restart: unless-stopped
     deploy:
       resources:
@@ -397,6 +398,7 @@ services:
   tempo:
     image: grafana/tempo:latest
     container_name: tempo
+    user: "0:0"
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./observability/tempo/tempo-config.yaml:/etc/tempo.yaml:ro
@@ -432,6 +434,8 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
+    ports:
+      - "3000:3000"
     volumes:
       - ./observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
@@ -448,8 +452,6 @@ services:
       - loki
       - tempo
     restart: unless-stopped
-    ports:
-      - "3000:3000"
 
 volumes:
   postgres_data: # Write DB volume
